@@ -1,0 +1,394 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- ENUMS ---
+
+enum EventStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  REJECTED
+  APPROVED
+  FUNDED    // Dana cair ke panitia
+  ONGOING
+  COMPLETED // Acara selesai
+  SETTLED   // Laporan keuangan selesai & sisa dana dikembalikan
+}
+
+enum TransactionType {
+  DEBIT  // Uang Keluar (Expense)
+  CREDIT // Uang Masuk (Income)
+}
+
+enum SystemRoleType {
+  RESIDENT
+  ADMIN      // RT
+  TREASURER  // Bendahara
+  LEADER     // RW/Ketua
+  CUSTOM     // Role tambahan di masa depan
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EventParticipantRole {
+  COMMITTEE
+  ATTENDEE
+  GUEST
+}
+
+enum FundRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// --- CORE SYSTEM & RBAC ---
+
+model Role {
+  id          Int            @id @default(autoincrement())
+  name        String         @unique // Display name: 'Pak RT', 'Sekretaris'
+  type        SystemRoleType @default(RESIDENT) // Mapping ke logic sistem
+  description String?
+  
+  users       User[]
+  
+  // Relasi ke Rule Approval (Dynamic Workflow)
+  approvalRules ApprovalRule[] 
+
+  createdAt   DateTime       @default(now())
+}
+
+model CommunityGroup {
+  id        Int      @id @default(autoincrement())
+  name      String   
+  type      String   // 'RT' atau 'RW'
+
+  // --- UPDATE 1: HIERARKI GROUP (RT punya Parent RW) ---
+  parentId  Int?     // Bisa null jika ini adalah RW (Top Level)
+  parent    CommunityGroup?  @relation("GroupHierarchy", fields: [parentId], references: [id])
+  children  CommunityGroup[] @relation("GroupHierarchy")
+  
+  users     User[]
+  events    Event[]
+  wallet    Wallet?
+  
+  // Konfigurasi approval khusus per Group (opsional)
+  approvalRules ApprovalRule[]
+  // Relasi Fund Request
+  fundRequestsSent     FundRequest[] @relation("FundRequester")
+  fundRequestsReceived FundRequest[] @relation("FundTarget")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id               String   @id @default(uuid())
+  email            String   @unique
+  password         String
+  fullName         String
+  phone            String?
+  address          String?
+  
+  isActive         Boolean  @default(true)
+  roleId           Int
+  role             Role     @relation(fields: [roleId], references: [id])
+  
+  communityGroupId Int
+  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+
+  // Self-Referential (Creator Tracking)
+  createdById      String?
+  createdBy        User?    @relation("UserCreator", fields: [createdById], references: [id])
+  createdUsers     User[]   @relation("UserCreator")
+
+  // Activity Relations
+  contributions       Contribution[]
+  eventsCreated       Event[]               @relation("EventCreator")
+  eventParticipations EventParticipant[]
+  approvalsGiven      EventApproval[]       @relation("ApproverUser")
+  statusChanges       EventStatusHistory[]  @relation("StatusChanger")
+  paymentGatewayTxs   PaymentGatewayTx[]
+  // --- UPDATE 2: RELASI FUND REQUEST ---
+  fundRequestsCreated  FundRequest[] @relation("FundCreator")
+  fundRequestsApproved FundRequest[] @relation("FundApprover")
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+}
+
+// --- FINANCE MODULE (IMMUTABLE & AUDITABLE) ---
+
+model Wallet {
+  id               Int            @id @default(autoincrement())
+  balance          Decimal        @default(0) @db.Decimal(15, 2)
+  
+  communityGroupId Int            @unique
+  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+  
+  transactions     Transaction[]
+  
+  updatedAt        DateTime       @updatedAt
+}
+
+model Contribution {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  amount      Decimal  @db.Decimal(15, 2)
+  month       Int      
+  year        Int      
+  paidAt      DateTime @default(now())
+  
+  // Relasi Keuangan
+  transaction Transaction? 
+
+  // --- UPDATE: Relasi ke Payment Gateway ---
+  // Optional, karena bisa saja bayar tunai (Manual)
+  paymentGatewayTxId String?           @unique 
+  paymentGatewayTx   PaymentGatewayTx? @relation(fields: [paymentGatewayTxId], references: [id])
+
+  createdAt   DateTime @default(now())
+}
+
+model Transaction {
+  id             String          @id @default(uuid())
+  walletId       Int
+  wallet         Wallet          @relation(fields: [walletId], references: [id])
+  
+  amount         Decimal         @db.Decimal(15, 2)
+  type           TransactionType
+  description    String
+  referenceCode  String?         // Kode unik referensi (misal: INV/2024/001)
+  
+  // Link Source (Hanya boleh salah satu yang terisi)
+  contributionId String?         @unique
+  contribution   Contribution?   @relation(fields: [contributionId], references: [id])
+  
+  eventId        String?         
+  event          Event?          @relation(fields: [eventId], references: [id])
+  
+  createdAt      DateTime        @default(now())
+  
+  // Transaction tidak boleh di-update setelah created (Immutable secara konsep)
+}
+
+// --- EVENT MODULE ---
+
+model Event {
+  id              String      @id @default(uuid())
+  title           String
+  description     String      @db.Text
+  status          EventStatus @default(DRAFT)
+  
+  // Budgeting
+  budgetEstimated Decimal     @db.Decimal(15, 2)
+  budgetActual    Decimal?    @db.Decimal(15, 2) 
+  
+  startDate       DateTime?
+  endDate         DateTime?
+
+  communityGroupId Int
+  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+  
+  createdById     String
+  createdBy       User            @relation("EventCreator", fields: [createdById], references: [id])
+
+  // Logic & Audit
+  approvals       EventApproval[]
+  statusHistory   EventStatusHistory[] // Audit Trail perubahan status
+  
+  participants    EventParticipant[]
+  transactions    Transaction[]   
+  expenses        EventExpense[]  
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+// MODEL BARU: Dynamic Approval Logic
+// Menentukan urutan approval: Admin (1) -> Treasurer (2) -> Leader (3)
+model ApprovalRule {
+  id               Int            @id @default(autoincrement())
+  communityGroupId Int
+  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+  
+  roleId           Int
+  role             Role           @relation(fields: [roleId], references: [id])
+  
+  stepOrder        Int            // Urutan: 1, 2, 3
+  isMandatory      Boolean        @default(true)
+
+  // --- FIELD BARU ---
+  // Jika diisi, rule ini hanya aktif jika budget event >= minAmount
+  minAmount        Decimal?       @db.Decimal(15, 2) 
+  
+  // Penanda apakah rule ini membutuhkan approval dari Role di Parent Group (RW)?
+  // Contoh: stepOrder 3, Role Treasurer, isCrossGroup = true -> Cari Bendahara RW
+  isCrossGroup     Boolean        @default(false)
+  
+  @@unique([communityGroupId, roleId, stepOrder]) // Mencegah duplikasi rule
+}
+
+model EventApproval {
+  id          String         @id @default(uuid())
+  eventId     String
+  event       Event          @relation(fields: [eventId], references: [id])
+  
+  approverId  String
+  approver    User           @relation("ApproverUser", fields: [approverId], references: [id])
+  
+  roleSnapshot String        // Snapshot nama role saat approval (Audit purpose)
+  stepOrder    Int           // Approval ini untuk step ke berapa?
+  
+  status      ApprovalStatus
+  notes       String?
+  
+  createdAt   DateTime       @default(now())
+
+  // Constraint: Satu user hanya bisa approve satu kali per event (kecuali reject lalu resubmit)
+  @@unique([eventId, approverId, stepOrder]) 
+}
+
+// MODEL BARU: Audit Trail Status
+model EventStatusHistory {
+  id          String      @id @default(uuid())
+  eventId     String
+  event       Event       @relation(fields: [eventId], references: [id])
+  
+  changedById String
+  changedBy   User        @relation("StatusChanger", fields: [changedById], references: [id])
+  
+  previousStatus EventStatus
+  newStatus      EventStatus
+  reason         String?     // "Disetujui rapat bulanan", "Dana kurang", dll
+  
+  createdAt   DateTime    @default(now())
+}
+
+model EventParticipant {
+  id        Int                  @id @default(autoincrement())
+  eventId   String
+  event     Event                @relation(fields: [eventId], references: [id])
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id])
+  
+  role      EventParticipantRole @default(ATTENDEE)
+  joinedAt  DateTime             @default(now())
+
+  @@unique([eventId, userId])
+}
+
+model EventExpense {
+  id          String   @id @default(uuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id])
+  
+  title       String   
+  amount      Decimal  @db.Decimal(15, 2)
+  proofImage  String?  
+  
+  verifiedBy  String?  // ID User (Bendahara) yang memvalidasi struk ini valid
+  isValid     Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+}
+
+// --- MIDTRANS & PAYMENT INTEGRATION ---
+
+enum PaymentGatewayStatus {
+  PENDING     // Menunggu pembayaran user
+  PAID        // Sukses (Settlement/Capture)
+  FAILED      // Gagal/Deny
+  EXPIRED     // User tidak bayar dalam batas waktu
+  REFUNDED    // Dana dikembalikan
+  CANCELLED   // Dibatalkan user
+}
+
+// Kategori pembayaran untuk UI/Logic, detail spesifik (misal: "bca_va") masuk string
+enum PaymentMethodCategory {
+  VIRTUAL_ACCOUNT   // BCA, Mandiri, BNI, BRI, Permata
+  E_WALLET          // GoPay, ShopeePay, OVO, Dana
+  QRIS              // GPN / QRIS
+  CREDIT_CARD       // Visa / Master
+  CONVENIENCE_STORE // Indomaret / Alfamart
+  MANUAL_TRANSFER   // Transfer manual ke rekening RT (Non-Midtrans)
+}
+
+model PaymentGatewayTx {
+  id              String                @id @default(uuid())
+  
+  // Identitas Transaksi
+  orderId         String                @unique // Generate unik: "INV-RW01-202402-UserA-Timestamp"
+  midtransId      String?               @unique // Transaction ID dari Midtrans (diisi setelah webhook/response)
+  
+  // Data Pembayaran
+  amount          Decimal               @db.Decimal(15, 2)
+  grossAmount     Decimal               @db.Decimal(15, 2) // Amount + Fee Midtrans (jika dibebankan ke user)
+  status          PaymentGatewayStatus  @default(PENDING)
+  
+  // Metode
+  methodCategory  PaymentMethodCategory
+  providerCode    String?               // String dari Midtrans: 'bca', 'gopay', 'indomaret'
+  vaNumber        String?               // Jika Virtual Account, simpan nomornya di sini
+  
+  // Snap / UI Data
+  snapToken       String?               // Token untuk memunculkan popup Snap di Frontend
+  redirectUrl     String?               // URL redirect jika non-snap
+  
+  // Audit Trail & Debugging
+  rawRequest      Json?                 // Apa yang kita kirim ke Midtrans
+  rawResponse     Json?                 // Webhook terakhir dari Midtrans (PENTING untuk debug)
+  paidAt          DateTime?             // Waktu sukses bayar (settlement time)
+
+  // Relasi ke User
+  userId          String
+  user            User                  @relation(fields: [userId], references: [id])
+  
+  // Relasi: Jika sukses, akan men-trigger pembuatan Contribution
+  contribution    Contribution?
+
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+}
+
+// --- MODEL BARU: FUND REQUEST (RT Minta Duit ke RW) ---
+model FundRequest {
+  id              String            @id @default(uuid())
+  
+  // Group yang meminta (RT)
+  requesterGroupId Int
+  requesterGroup   CommunityGroup   @relation("FundRequester", fields: [requesterGroupId], references: [id], onDelete: Cascade)
+  
+  // Group tujuan (RW)
+  targetGroupId    Int
+  targetGroup      CommunityGroup   @relation("FundTarget", fields: [targetGroupId], references: [id], onDelete: Cascade)
+  
+  amount          Decimal           @db.Decimal(15, 2)
+  description     String            @db.Text
+  status          FundRequestStatus @default(PENDING)
+  
+  // Audit User
+  createdById     String
+  createdBy       User              @relation("FundCreator", fields: [createdById], references: [id])
+  
+  // Approval (Biasanya Bendahara RW)
+  approvedById    String?
+  approvedBy      User?             @relation("FundApprover", fields: [approvedById], references: [id])
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
