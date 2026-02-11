@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
-import LoginPage from "@/pages/auth/loginPage"; 
+// Pastikan nama file import sesuai (PascalCase)
+import LoginPage from "@/pages/auth/LoginPage"; 
 
 function App() {
   return (
@@ -39,8 +40,8 @@ function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
 
-      {/* Global Toaster untuk Notifikasi (Success/Error) */}
-      <Toaster /> 
+      {/* Global Toaster: Wajib ada agar toast.success/error di LoginPage muncul */}
+      <Toaster position="top-center" richColors /> 
     </BrowserRouter>
   );
 }
@@ -55,15 +56,15 @@ export default App;
 const DashboardLayoutPlaceholder = () => (
   <div className="flex min-h-screen font-sans">
     <aside className="w-64 bg-slate-900 text-white p-6 hidden md:block">
-      <h3 className="text-xl font-bold mb-6">Warga App</h3>
+      <h3 className="text-xl font-bold mb-6 font-poppins">Warga App</h3>
       <nav className="space-y-2">
-        <div className="p-2 bg-slate-800 rounded">Menu Sementara</div>
+        <div className="p-2 bg-slate-800 rounded text-sm">Menu Sementara</div>
       </nav>
     </aside>
     <main className="flex-1 bg-slate-50">
       <header className="bg-white p-4 border-b shadow-sm flex justify-between">
-        <span className="font-medium">Header</span>
-        <button className="text-sm text-red-500">Logout</button>
+        <span className="font-medium font-poppins">Header</span>
+        <button className="text-sm text-red-500 font-medium hover:underline">Logout</button>
       </header>
       <div className="p-8">
         <Outlet />
@@ -75,29 +76,29 @@ const DashboardLayoutPlaceholder = () => (
 // Halaman Dummy (Nanti diganti dengan page asli di folder src/pages/...)
 const LeaderDashboard = () => (
     <div className="p-4 border rounded-lg border-indigo-200 bg-indigo-50 text-indigo-700">
-        <h2 className="text-2xl font-bold">Dashboard Ketua RW</h2>
-        <p>Disini nanti statistik satu RW.</p>
+        <h2 className="text-2xl font-bold font-poppins">Dashboard Ketua RW</h2>
+        <p className="mt-2">Disini nanti statistik satu RW.</p>
     </div>
 );
 
 const AdminDashboard = () => (
     <div className="p-4 border rounded-lg border-blue-200 bg-blue-50 text-blue-700">
-        <h2 className="text-2xl font-bold">Dashboard Admin RT</h2>
-        <p>Disini manajemen warga per RT.</p>
+        <h2 className="text-2xl font-bold font-poppins">Dashboard Admin RT</h2>
+        <p className="mt-2">Disini manajemen warga per RT.</p>
     </div>
 );
 
 const FinanceDashboard = () => (
     <div className="p-4 border rounded-lg border-amber-200 bg-amber-50 text-amber-700">
-        <h2 className="text-2xl font-bold">Keuangan & Kas</h2>
-        <p>Approval dana dan laporan keuangan.</p>
+        <h2 className="text-2xl font-bold font-poppins">Keuangan & Kas</h2>
+        <p className="mt-2">Approval dana dan laporan keuangan.</p>
     </div>
 );
 
 const ResidentDashboard = () => (
     <div className="p-4 border rounded-lg border-emerald-200 bg-emerald-50 text-emerald-700">
-        <h2 className="text-2xl font-bold">Dashboard Warga</h2>
-        <p>Status iuran dan event warga.</p>
+        <h2 className="text-2xl font-bold font-poppins">Dashboard Warga</h2>
+        <p className="mt-2">Status iuran dan event warga.</p>
     </div>
 );
 
@@ -107,7 +108,7 @@ const UserProfilePlaceholder = () => (
 
 const NotFound = () => (
     <div className="flex flex-col items-center justify-center min-h-screen text-slate-500">
-        <h1 className="text-4xl font-bold mb-2">404</h1>
+        <h1 className="text-4xl font-bold mb-2 font-poppins">404</h1>
         <p>Halaman tidak ditemukan</p>
     </div>
 );
