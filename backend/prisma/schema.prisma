@@ -16,6 +16,7 @@ enum EventStatus {
   UNDER_REVIEW
   REJECTED
   APPROVED
+  CANCELLED
   FUNDED    // Dana cair ke panitia
   ONGOING
   COMPLETED // Acara selesai
@@ -206,7 +207,7 @@ model Event {
   
   createdById     String
   createdBy       User            @relation("EventCreator", fields: [createdById], references: [id])
-
+  fundRequests     FundRequest[]
   // Logic & Audit
   approvals       EventApproval[]
   statusHistory   EventStatusHistory[] // Audit Trail perubahan status
@@ -380,6 +381,10 @@ model FundRequest {
   amount          Decimal           @db.Decimal(15, 2)
   description     String            @db.Text
   status          FundRequestStatus @default(PENDING)
+
+  // 👇 TAMBAHKAN 2 BARIS INI
+  eventId          String?           // Optional, karena bisa saja RT minta dana bukan untuk event (misal benerin gapura)
+  event            Event?            @relation(fields: [eventId], references: [id])
   
   // Audit User
   createdById     String

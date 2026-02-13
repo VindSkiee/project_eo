@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
-import { EventsController } from './events.controller';
-import { EventsService } from './events.service';
-import { EventApprovalService } from './event-approval.service';
+import { EventsController } from './controllers/events.controller';
+import { EventsService } from './services/events.service';
+import { EventApprovalService } from './services/event-approval.service';
+import { EventsRepository } from './events.repository';
+import { FundRequestsService } from './services/fund-requests.service';
+import { FundRequestsController } from './controllers/fund-requests.controller';
 
 @Module({
-  controllers: [EventsController],
-  providers: [EventsService, EventApprovalService],
-  exports: [EventsService, EventApprovalService],
+  controllers: [EventsController, FundRequestsController],
+  providers: [EventsService, EventApprovalService, FundRequestsService, EventsRepository],
+  exports: [EventsService, EventApprovalService, FundRequestsService, EventsRepository], // Ekspor repository agar bisa dipakai di modul lain (misal FundRequestsService)
 })
 export class EventsModule {}
