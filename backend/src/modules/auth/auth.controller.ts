@@ -33,7 +33,7 @@ export class AuthController {
     // 1. Masukkan token ke dalam HttpOnly Cookie
     res.cookie('accessToken', result.accessToken, {
       httpOnly: true, // Tidak bisa dibaca oleh JavaScript (Anti XSS)
-      secure: process.env.NODE_ENV === 'development', // Harus true jika pakai HTTPS (Production)
+      secure: process.env.NODE_ENV === 'production', // Harus true jika pakai HTTPS (Production)
       sameSite: 'lax', // Keamanan tambahan
       maxAge: 1000 * 60 * 60 * 24, // Expired dalam 1 hari (sesuaikan dengan exp JWT)
     });

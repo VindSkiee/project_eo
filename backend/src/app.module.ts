@@ -11,7 +11,7 @@ import databaseConfig from './config/database.config';
 import midtransConfig from './config/midtrans.config';
 
 // Global Modules
-import { DatabaseModule } from './database/prisma.module';
+import { PrismaModule } from './database/prisma.module';
 import { MailModule } from './providers/mail/mail.module';
 import { StorageModule } from './providers/storage/storage.module';
 
@@ -35,7 +35,7 @@ import { RolesGuard } from '@common/guards/roles.guard';
       envFilePath: '.env',
       load: [appConfig, databaseConfig, midtransConfig],
     }),
-    DatabaseModule,
+    PrismaModule,
     MailModule,
     StorageModule,
     AuthModule,
