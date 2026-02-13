@@ -1,11 +1,11 @@
-// schema.prisma
-
 generator client {
   provider = "prisma-client-js"
+  // Pastikan TIDAK ADA: previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL") 
 }
 
 // --- ENUMS ---

@@ -4,12 +4,14 @@ import {
   Body, 
   HttpCode, 
   HttpStatus, 
-  Get, 
-  UseGuards 
+  Get,
+  Res, 
+ 
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public, ActiveUser } from '@common/decorators'; // Import Public Decorator
+import type { Response } from 'express'; // <-- Import dari express
 
 @Controller('auth')
 export class AuthController {
@@ -19,38 +21,35 @@ export class AuthController {
    * POST /auth/login
    * Endpoint Publik untuk menukar Email & Password dengan Token
    */
-  @Public() // <--- Menandakan endpoint ini boleh diakses tanpa token
+  @Public()
   @Post('login')
-  @HttpCode(HttpStatus.OK) // Ubah status default 201 jadi 200
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  @HttpCode(HttpStatus.OK)
+  async login(
+    @Body() loginDto: LoginDto, 
+    @Res({ passthrough: true }) res: Response // <-- Gunakan @Res passthrough
+  ) {
+    const result = await this.authService.login(loginDto);
+
+    // 1. Masukkan token ke dalam HttpOnly Cookie
+    res.cookie('accessToken', result.accessToken, {
+      httpOnly: true, // Tidak bisa dibaca oleh JavaScript (Anti XSS)
+      secure: process.env.NODE_ENV === 'development', // Harus true jika pakai HTTPS (Production)
+      sameSite: 'lax', // Keamanan tambahan
+      maxAge: 1000 * 60 * 60 * 24, // Expired dalam 1 hari (sesuaikan dengan exp JWT)
+    });
+
+    // 2. Kembalikan data user saja ke frontend (tanpa token)
+    return { user: result.user };
   }
 
-  /**
-   * POST /auth/logout
-   * Endpoint Private (Butuh Token) untuk Logout
-   */
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  async logout(@ActiveUser() user: any) {
-    // user.id didapat otomatis dari token via JwtStrategy -> ActiveUser Decorator
-    return this.authService.logout(user.id);
-  }
-
-  /**
-   * GET /auth/me
-   * Endpoint untuk cek status login user (Pengganti "Page Login" di API)
-   * * Frontend Logic:
-   * - Saat buka App -> Request ke /auth/me
-   * - Jika 200 OK -> Redirect Dashboard
-   * - Jika 401 Unauthorized -> Tampilkan Form Login
-   */
-  @Get('me')
-  async getProfile(@ActiveUser() user: any) {
-    // Mengembalikan data user yang sedang login saat ini
-    return {
-      message: 'User session is active',
-      user: user, 
-    };
+  async logout(@ActiveUser() user: any, @Res({ passthrough: true }) res: Response) {
+    await this.authService.logout(user.id);
+    
+    // Hapus cookie saat logout
+    res.clearCookie('accessToken');
+    
+    return { message: 'Logout berhasil' };
   }
 }

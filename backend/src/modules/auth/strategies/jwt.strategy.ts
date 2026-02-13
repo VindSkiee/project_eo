@@ -2,46 +2,48 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, ExtractJwt } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { UsersRepository } from '../../community/repositories/users.repository'; // Pastikan path import sesuai
+import { UsersRepository } from '../../community/repositories/users.repository';
+import { Request } from 'express'; // <-- Import
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    private configService: ConfigService,
-    private usersRepository: UsersRepository, // Inject Repository, bukan Service/Prisma
+    private readonly configService: ConfigService,
+    private readonly usersRepository: UsersRepository,
   ) {
+    const secret = configService.getOrThrow<string>('JWT_SECRET');
+    // Kalau ENV tidak ada → aplikasi gagal start. Itu yang kita mau.
+
     super({
-      // 1. Cara ambil token: Dari Header 'Authorization: Bearer <token>'
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      
-      // 2. Cek Expiration: Jika token expired, request langsung ditolak (401)
+      jwtFromRequest: (req: Request) => {
+        let token = null;
+        if (req && req.cookies) {
+          token = req.cookies['accessToken'];
+        }
+        return token;
+      },
       ignoreExpiration: false,
-      
-      // 3. Secret Key: Ambil dari ENV via ConfigService agar aman
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'super-secret-key',
+      secretOrKey: secret,
     });
   }
 
-  /**
-   * Method ini otomatis dipanggil SETELAH token lolos verifikasi tanda tangan (signature).
-   * Tugas kita di sini adalah memastikan User pemilik token masih ada di Database.
-   */
   async validate(payload: any) {
-    // payload.sub = User ID (diset saat login di AuthService)
-    const user = await this.usersRepository.findById(payload.sub);
-
-    // SECURITY CHECK:
-    // Jika user dihapus oleh Admin saat token masih hidup, ini akan memblokirnya.
-    if (!user) {
-      throw new UnauthorizedException('Akses ditolak: User tidak ditemukan atau non-aktif.');
+    // Pastikan payload punya sub
+    if (!payload?.sub) {
+      throw new UnauthorizedException('Token tidak valid.');
     }
 
-    // Sanitasi: Buang field password sebelum data user ditempel ke Request
-    // @ts-ignore
-    const { password, ...result } = user;
+    const user = await this.usersRepository.findById(payload.sub);
 
-    // Return value ini akan otomatis tersedia di `request.user`
-    // Dan bisa diambil lewat decorator @ActiveUser()
+    if (!user) {
+      throw new UnauthorizedException(
+        'Akses ditolak: User tidak ditemukan atau non-aktif.',
+      );
+    }
+
+    // Buang password
+    const { password, ...result } = user as any;
+
     return result;
   }
 }

@@ -1,82 +1,128 @@
 import { PrismaClient, SystemRoleType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
-const prisma = new PrismaClient();
+// Inisialisasi Prisma Client Standard (Versi 5)
+const prisma = new PrismaClient({
+  log: ['query', 'info', 'warn', 'error'],
+});
 
 async function main() {
-  // 1. Buat Roles (Master Data)
-  const roles = [
+  console.log('🌱 Starting Seeding (Full Team)...');
+
+  // ==========================================
+  // 1. MASTER ROLES
+  // ==========================================
+  const rolesData = [
     { name: 'Ketua RW', type: SystemRoleType.LEADER },
     { name: 'Ketua RT', type: SystemRoleType.ADMIN },
-    { name: 'Bendahara', type: SystemRoleType.TREASURER },
+    { name: 'Bendahara RW', type: SystemRoleType.TREASURER },
+    { name: 'Bendahara RT', type: SystemRoleType.TREASURER },
     { name: 'Warga', type: SystemRoleType.RESIDENT },
   ];
 
-  for (const r of roles) {
-    await prisma.role.upsert({
+  const roleMap = new Map<string, number>();
+
+  for (const r of rolesData) {
+    const role = await prisma.role.upsert({
       where: { name: r.name },
       update: {},
       create: { name: r.name, type: r.type },
     });
+    roleMap.set(r.name, role.id);
   }
 
-  // 2. Buat Community Groups (RT/RW)
-  const rwGroup = await prisma.communityGroup.create({
-    data: { name: 'RW 05 Center', type: 'RW' },
+  // ==========================================
+  // 2. COMMUNITY GROUPS (RT/RW)
+  // ==========================================
+  
+  // RW 05 Center
+  const rwGroup = await prisma.communityGroup.upsert({
+    where: { id: 1 }, // Asumsi ID 1, atau bisa pakai unique name jika ada
+    update: {},
+    create: { 
+      name: 'RW 05 Center', 
+      type: 'RW',
+      wallet: { create: { balance: 0 } }
+    },
   });
 
-  const rt01 = await prisma.communityGroup.create({
-    data: { name: 'RT 01', type: 'RT' },
+  // RT 01
+  const rt01 = await prisma.communityGroup.upsert({
+    where: { id: 2 },
+    update: {},
+    create: { 
+      name: 'RT 01', 
+      type: 'RT',
+      parentId: rwGroup.id,
+      wallet: { create: { balance: 0 } }
+    },
   });
 
-  const rt02 = await prisma.communityGroup.create({
-    data: { name: 'RT 02', type: 'RT' },
-  });
+  // ==========================================
+  // 3. USERS (4 AKUN UTAMA)
+  // ==========================================
+  const password = await bcrypt.hash('123456', 10);
 
-  // 3. Buat User: LEADER (Super Admin lokal)
-  const hashPassword = await bcrypt.hash('123456', 10); // Password default
-
-  // Ambil ID Role
-  const leaderRole = await prisma.role.findUnique({ where: { name: 'Ketua RW' } });
-  const adminRole = await prisma.role.findUnique({ where: { name: 'Ketua RT' } });
-  const residentRole = await prisma.role.findUnique({ where: { name: 'Warga' } });
-
-  // Create Pak RW
-  await prisma.user.create({
-    data: {
+  // 1. KETUA RW (rw@warga.id)
+  await prisma.user.upsert({
+    where: { email: 'rw@warga.id' },
+    update: {}, // Jika sudah ada, jangan lakukan apa-apa
+    create: {
       email: 'rw@warga.id',
-      password: hashPassword,
       fullName: 'Bapak Ketua RW',
-      roleId: leaderRole!.id,
+      password,
+      roleId: roleMap.get('Ketua RW')!,
       communityGroupId: rwGroup.id,
     },
   });
 
-  // Create Pak RT 01
-  await prisma.user.create({
-    data: {
+  // 2. KETUA RT (rt01@warga.id)
+  await prisma.user.upsert({
+    where: { email: 'rt01@warga.id' },
+    update: {},
+    create: {
       email: 'rt01@warga.id',
-      password: hashPassword,
       fullName: 'Bapak RT Satu',
-      roleId: adminRole!.id,
+      password,
+      roleId: roleMap.get('Ketua RT')!,
       communityGroupId: rt01.id,
     },
   });
 
-  // Create Warga Dummy di RT 01
-  await prisma.user.create({
-    data: {
+  // 3. BENDAHARA RW (bendahara.rw@warga.id) <-- YANG TADI HILANG
+  await prisma.user.upsert({
+    where: { email: 'bendahara.rw@warga.id' },
+    update: {},
+    create: {
+      email: 'bendahara.rw@warga.id',
+      fullName: 'Ibu Bendahara RW',
+      password,
+      roleId: roleMap.get('Bendahara RW')!,
+      communityGroupId: rwGroup.id,
+    },
+  });
+
+  // 4. WARGA BIASA (warga01@warga.id) <-- YANG TADI HILANG
+  await prisma.user.upsert({
+    where: { email: 'warga01@warga.id' },
+    update: {},
+    create: {
       email: 'warga01@warga.id',
-      password: hashPassword,
       fullName: 'Udin Warga',
-      roleId: residentRole!.id,
+      password,
+      roleId: roleMap.get('Warga')!,
       communityGroupId: rt01.id,
     },
   });
 
-  console.log('Seeding selesai! Login: rw@warga.id / 123456');
+  console.log('✅ Seeding Selesai! (4 Akun Siap)');
 }
 
 main()
-  .catch((e) => console.error(e))
-  .finally(async () => await prisma.$disconnect());
+  .catch((e) => {
+    console.error('❌ Error Seeding:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
