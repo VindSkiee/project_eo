@@ -6,8 +6,7 @@ import {
   Users, 
   UserCircle, 
   LogOut, 
-  Menu, 
-  Settings
+  Menu
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -16,14 +15,6 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // Tipe data user dari LocalStorage
@@ -38,6 +29,7 @@ export default function DashboardLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // 1. Ambil Data User Saat Komponen Dimuat
   useEffect(() => {
@@ -83,126 +75,138 @@ export default function DashboardLayout() {
 
   const menuItems = getMenuItems(user?.role);
 
-  // 4. Komponen Render Menu (Bisa dipakai di Desktop & Mobile)
-  const MenuLinks = () => (
-    <nav className="space-y-2 mt-4 flex-1">
-      {menuItems.map((item) => {
-        const isActive = location.pathname.includes(item.path);
-        const Icon = item.icon;
-        
-        return (
-          <Link key={item.path} to={item.path}>
-            <div className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm mb-1
-              ${isActive 
-                ? "bg-brand-green text-white shadow-md" 
-                : "text-sidebar-foreground/80 hover:bg-white/10 hover:text-white"
-              }`}
-            >
-              <Icon className="h-5 w-5" />
-              {item.title}
-            </div>
-          </Link>
-        );
-      })}
-    </nav>
+  // 4. Sidebar Content (Glass Sidebar - Shared Desktop & Mobile)
+  const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
+    <>
+      
+
+      {/* Profile Section */}
+      <div className={`flex items-center gap-3 pt-6 pb-5 ${collapsed ? 'px-3 justify-center' : 'px-6'}`}>
+        <Avatar className="h-12 w-12 border-2 border-white/20 shadow-lg">
+          <AvatarFallback className="bg-white/10 text-white font-bold text-lg font-poppins">
+            {user?.fullName?.charAt(0).toUpperCase() || "U"}
+          </AvatarFallback>
+        </Avatar>
+        {!collapsed && (
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-[0.4px] text-white/50 leading-[22px]">
+              {user?.role || "GUEST"}
+            </p>
+            <p className="text-[14px] font-medium text-white leading-[20px] truncate">
+              {user?.fullName || "User"}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div className="h-px w-full opacity-20">
+        <div className="h-full w-full bg-gradient-to-r from-transparent via-white to-transparent" />
+      </div>
+
+      {/* Menu Section */}
+      <div className={`flex-1 pt-4 pb-2 overflow-y-auto ${collapsed ? 'px-3' : 'px-5'}`}>
+        {!collapsed && (
+          <p className="text-[11px] font-medium uppercase tracking-[0.4px] text-white/40 px-4 mb-2 leading-[24px]">
+            Menu
+          </p>
+        )}
+        <nav className="flex flex-col gap-[2px]">
+          {menuItems.map((item) => {
+            const isActive = location.pathname.includes(item.path);
+            const Icon = item.icon;
+            return (
+              <Link key={item.path} to={item.path}>
+                <div
+                  className={`relative flex items-center gap-4 rounded-xl transition-all duration-200 font-medium text-[14px] leading-[20px] ${collapsed ? 'px-3 py-[14px] justify-center' : 'px-4 py-[14px]'}
+                    ${isActive
+                      ? "bg-brand-green text-white shadow-lg shadow-brand-green/20 border-[0.5px] border-white/10"
+                      : "text-white/70 hover:bg-white/10 hover:text-white border-[0.5px] border-transparent"
+                    }`}
+                  title={collapsed ? item.title : undefined}
+                >
+                  <Icon className="h-[22px] w-[22px] shrink-0" strokeWidth={1.8} />
+                  {!collapsed && <span className="truncate">{item.title}</span>}
+                </div>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Divider */}
+      <div className="h-px w-full opacity-20">
+        <div className="h-full w-full bg-gradient-to-r from-transparent via-red to-transparent" />
+      </div>
+
+      {/* Logout */}
+      <div className={`py-4 ${collapsed ? 'px-3' : 'px-5'}`}>
+        <button
+          onClick={handleLogout}
+          className={`flex items-center gap-4 w-full rounded-xl text-white/70 hover:bg-red-500/20 hover:text-red-300 transition-all duration-200 text-[14px] font-medium leading-[20px] ${collapsed ? 'px-3 py-[14px] justify-center' : 'px-4 py-[14px]'}`}
+          title={collapsed ? "Keluar" : undefined}
+        >
+          <LogOut className="h-[22px] w-[22px] shrink-0" strokeWidth={1.8} />
+          {!collapsed && "Keluar"}
+        </button>
+      </div>
+    </>
   );
 
   return (
-    <div className="flex min-h-screen w-full bg-slate-50 font-sans">
+    <div className="flex min-h-screen w-full font-sans bg-slate-50">
       
       {/* --- SIDEBAR (DESKTOP) --- */}
-      <aside className="hidden md:flex w-64 flex-col bg-sidebar text-sidebar-foreground p-4 shadow-xl z-20">
-        <div className="flex items-center gap-3 px-2 mb-8 mt-4">
-          <div className="h-8 w-8 bg-brand-green rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold font-poppins text-lg leading-none mt-[-2px]">W</span>
-          </div>
-          <h2 className="text-2xl font-bold font-poppins tracking-tight text-white">Warga App</h2>
-        </div>
-        
-        <MenuLinks />
-
-        {/* Tombol Logout Bawah */}
-        <div className="mt-auto pt-4 border-t border-white/10">
-          <button 
-            onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-red-300 hover:bg-red-500 hover:text-white transition-colors text-sm font-medium"
+      <aside className={`hidden md:flex shrink-0 p-3 z-20 transition-all duration-300 ${isCollapsed ? 'w-[100px]' : 'w-[280px]'}`}>
+        <div className="relative w-full backdrop-blur-[80px] bg-primary/80 border-[0.5px] border-solid border-white/10 rounded-[28px] shadow-[0px_24px_64px_-16px_rgba(7,44,82,0.3)] flex flex-col">
+          {/* Collapse Button */}
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="absolute -right-3 top-20 z-50 w-8 h-8 rounded-full bg-white border-[0.5px] border-primary/20 shadow-[0px_4px_12px_rgba(7,44,82,0.15)] flex items-center justify-center hover:bg-brand-green transition-all duration-200 group"
+            title={isCollapsed ? "Perluas sidebar" : "Tutup sidebar"}
           >
-            <LogOut className="h-5 w-5" />
-            Keluar
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`text-primary group-hover:text-white transition-all duration-300 ${isCollapsed ? 'rotate-180' : ''}`}
+            >
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
           </button>
+          
+          <SidebarContent collapsed={isCollapsed} />
         </div>
       </aside>
 
       {/* --- MAIN CONTENT AREA --- */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         
-        {/* HEADER */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-8 shrink-0 z-10 shadow-sm">
-          
-          {/* Bagian Kiri Header: Mobile Menu Trigger */}
-          <div className="flex items-center gap-4">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden text-slate-600">
-                  <Menu className="h-6 w-6" />
-                </Button>
-              </SheetTrigger>
-              {/* Sidebar versi Mobile (Muncul dari kiri) */}
-              <SheetContent side="left" className="w-64 bg-sidebar text-sidebar-foreground p-4 border-r-0 flex flex-col">
-                <div className="flex items-center gap-3 px-2 mb-8 mt-4">
-                  <div className="h-8 w-8 bg-brand-green rounded-lg"></div>
-                  <h2 className="text-2xl font-bold font-poppins text-white">Warga App</h2>
-                </div>
-                <MenuLinks />
-              </SheetContent>
-            </Sheet>
-
-            <span className="font-semibold text-slate-700 font-poppins hidden sm:block">
-               {/* Teks Header Dinamis (Opsional) */}
-               Selamat datang, {user?.fullName || "Warga"}
-            </span>
-          </div>
-
-          {/* Bagian Kanan Header: Profil Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full border border-slate-200 hover:bg-slate-100 p-0">
-                <Avatar className="h-9 w-9">
-                  <AvatarFallback className="bg-primary/10 text-primary font-bold">
-                    {user?.fullName?.charAt(0).toUpperCase() || "U"}
-                  </AvatarFallback>
-                </Avatar>
+        {/* Mobile Menu Button (Fixed) */}
+        <div className="md:hidden fixed top-4 left-4 z-50">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="bg-white/90 backdrop-blur-md shadow-lg text-primary hover:text-primary hover:bg-slate-50">
+                <Menu className="h-6 w-6" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none font-poppins">{user?.fullName || "User"}</p>
-                  <p className="text-xs leading-none text-slate-500 mt-1">
-                    {user?.email || "email@warga.id"}
-                  </p>
-                  <div className="mt-2 text-[10px] uppercase font-bold text-brand-green tracking-wider">
-                    Role: {user?.role || "GUEST"}
-                  </div>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate("/dashboard/profile")} className="cursor-pointer">
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Pengaturan Profil</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50">
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Keluar</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </SheetTrigger>
+            {/* Glass Sidebar Mobile */}
+            <SheetContent side="left" className="w-[280px] p-0 border-r-0 bg-transparent shadow-none [&>button]:text-white/80">
+              <div className="h-full m-3 backdrop-blur-[80px] bg-primary/90 rounded-[28px] shadow-[0px_24px_64px_-16px_rgba(7,44,82,0.3)] flex flex-col overflow-hidden">
+                <SidebarContent collapsed={false} />
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
 
-        </header>
-
-        {/* CONTENT OUTLET (Halaman anak dirender disini) */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-50/50">
+        {/* CONTENT OUTLET - Full Screen */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8">
           <Outlet />
         </div>
 
