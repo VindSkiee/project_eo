@@ -90,6 +90,8 @@ model CommunityGroup {
   fundRequestsSent     FundRequest[] @relation("FundRequester")
   fundRequestsReceived FundRequest[] @relation("FundTarget")
 
+  duesRule DuesRule?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -124,6 +126,9 @@ model User {
   // --- UPDATE 2: RELASI FUND REQUEST ---
   fundRequestsCreated  FundRequest[] @relation("FundCreator")
   fundRequestsApproved FundRequest[] @relation("FundApprover")
+  transactions  Transaction[] // Relasi balik untuk mencatat transaksi yang dibuat user ini
+
+  lastPaidPeriod   DateTime?
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -141,6 +146,20 @@ model Wallet {
   
   transactions     Transaction[]
   
+  updatedAt        DateTime       @updatedAt
+}
+
+model DuesRule {
+  id               Int            @id @default(autoincrement())
+  
+  communityGroupId Int            @unique // Satu RT/RW hanya punya 1 aturan iuran aktif
+  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+
+  amount           Decimal        @db.Decimal(15, 2) // Misal: 15.000
+  dueDay           Int            @default(10)       // Jatuh tempo setiap tanggal berapa (misal tgl 10)
+  
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 }
 
@@ -174,6 +193,10 @@ model Transaction {
   type           TransactionType
   description    String
   referenceCode  String?         // Kode unik referensi (misal: INV/2024/001)
+
+  // 👇 TAMBAHKAN INI (Relation ke User)
+  createdById    String?         // Nullable, karena system transaction tidak punya user
+  createdBy      User?           @relation(fields: [createdById], references: [id])
   
   // Link Source (Hanya boleh salah satu yang terisi)
   contributionId String?         @unique
@@ -257,7 +280,7 @@ model EventApproval {
   
   status      ApprovalStatus
   notes       String?
-  
+  approvedAt   DateTime? // Untuk mencatat kapan tombol ditekan
   createdAt   DateTime       @default(now())
 
   // Constraint: Satu user hanya bisa approve satu kali per event (kecuali reject lalu resubmit)

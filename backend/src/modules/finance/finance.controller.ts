@@ -1,73 +1,87 @@
-import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
-import { FinanceService } from './finance.service';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  UseGuards
+} from '@nestjs/common';
+import { SystemRoleType } from '@prisma/client';
+
+// Decorators
+import { Roles } from '@common/decorators/roles.decorator';
+import { ActiveUser } from '@common/decorators/active-user.decorator';
+import type { ActiveUserData } from '@common/decorators/active-user.decorator';
+
+// Services
+import { FinanceService } from './services/finance.service';
+import { DuesService } from './services/dues.service';
+
+// DTOs
+import { CreateManualTransactionDto } from './dto/create-manual-transaction.dto';
+import { SetDuesDto } from './dto/set-dues.dto';
 
 @Controller('finance')
 export class FinanceController {
-  constructor(private readonly financeService: FinanceService) {}
+  constructor(
+    private readonly financeService: FinanceService,
+    private readonly duesService: DuesService,
+  ) { }
 
-  // Wallet endpoints
-  @Get('wallet/:userId')
-  async getWallet(@Param('userId') userId: string) {
-    return this.financeService.getWallet(userId);
+  // ==========================================
+  // 1. MANAJEMEN DOMPET & KAS (Khusus Pengurus)
+  // ==========================================
+
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)
+  @Get('wallet')
+  @HttpCode(HttpStatus.OK)
+  async getWalletDetails(@ActiveUser() user: ActiveUserData) {
+    // Bendahara melihat saldo dompet grupnya sendiri
+    return this.financeService.getWalletDetails(user.communityGroupId);
   }
 
-  @Get('wallet/:userId/balance')
-  async getWalletBalance(@Param('userId') userId: string) {
-    return this.financeService.getWalletBalance(userId);
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)
+  @Get('transactions')
+  @HttpCode(HttpStatus.OK)
+  async getTransactionHistory(@ActiveUser() user: ActiveUserData) {
+    // Bendahara melihat mutasi rekening koran (history)
+    return this.financeService.getTransactionHistory(user.communityGroupId);
   }
 
-  @Post('wallet/:userId/credit')
-  async creditWallet(
-    @Param('userId') userId: string,
-    @Body() body: { amount: number; description: string },
+  @Roles(SystemRoleType.TREASURER, SystemRoleType.LEADER) // Admin RT tidak boleh pegang uang tunai (Opsional)
+  @Post('transactions')
+  @HttpCode(HttpStatus.CREATED)
+  async createManualTransaction(
+    @ActiveUser() user: ActiveUserData,
+    @Body() dto: CreateManualTransactionDto
   ) {
-    return this.financeService.creditWallet(
-      userId,
-      body.amount,
-      body.description,
-    );
+    // Input pengeluaran tunai / belanja ATK / sumbangan offline
+    return this.financeService.createManualTransaction(dto, user);
   }
 
-  @Post('wallet/:userId/debit')
-  async debitWallet(
-    @Param('userId') userId: string,
-    @Body() body: { amount: number; description: string },
+  // ==========================================
+  // 2. MANAJEMEN IURAN & TAGIHAN (Dues)
+  // ==========================================
+
+  // A. Setting Harga (Hanya Ketua & Bendahara)
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER, SystemRoleType.TREASURER)
+  @Post('dues/config')
+  @HttpCode(HttpStatus.OK)
+  async setDuesConfig(
+    @ActiveUser() user: ActiveUserData,
+    @Body() dto: SetDuesDto
   ) {
-    return this.financeService.debitWallet(
-      userId,
-      body.amount,
-      body.description,
-    );
+    // Contoh: RT 01 set harga 15.000
+    return this.duesService.setDuesRule(dto, user);
   }
 
-  // Transaction/Ledger endpoints
-  @Get('transactions/:userId')
-  async getTransactionHistory(
-    @Param('userId') userId: string,
-    @Query() filters: any,
-  ) {
-    return this.financeService.getTransactionHistory(userId, filters);
-  }
-
-  @Get('transaction/:transactionId')
-  async getTransaction(@Param('transactionId') transactionId: string) {
-    return this.financeService.getTransaction(transactionId);
-  }
-
-  // Report endpoints
-  @Get('reports/financial')
-  async getFinancialReport(
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
-  ) {
-    return this.financeService.getFinancialReport(
-      new Date(startDate),
-      new Date(endDate),
-    );
-  }
-
-  @Get('reports/user/:userId/summary')
-  async getUserFinancialSummary(@Param('userId') userId: string) {
-    return this.financeService.getUserFinancialSummary(userId);
+  @Roles(SystemRoleType.RESIDENT)
+  @Get('dues/my-bill')
+  @HttpCode(HttpStatus.OK)
+  async getMyBill(@ActiveUser() user: ActiveUserData) {
+    // Logic cerdas yang memisahkan jatah RT dan RW
+    // Output: { total: 30000, breakdown: [{RT: 15000}, {RW: 15000}] }
+    return this.duesService.getMyBill(user);
   }
 }

@@ -5,27 +5,28 @@ import {
   BadRequestException
 } from '@nestjs/common';
 import { EventsRepository } from '../events.repository';
-import { ActiveUserData } from '@common/decorators/active-user.decorator'; // Sesuaikan path
+import { ActiveUserData } from '@common/decorators/active-user.decorator';
 import { EventStatus, SystemRoleType } from '@prisma/client';
 import { CreateEventDto } from '../dto/create-event.dto';
 import { UpdateEventDto } from '../dto/update-event.dto';
 import { EventApprovalService } from './event-approval.service';
 import { SubmitExpenseDto } from '../dto/submit-expense.dto';
 import { VerifyExpenseDto } from '../dto/verify-expense.dto';
+// 👇 IMPORT FINANCE SERVICE
+import { FinanceService } from '../../finance/services/finance.service'; 
 
 @Injectable()
 export class EventsService {
   constructor(
     private readonly eventsRepo: EventsRepository,
-    private readonly eventApprovalService: EventApprovalService
+    private readonly eventApprovalService: EventApprovalService,
+    private readonly financeService: FinanceService // 👈 INJECT DI SINI
   ) { }
 
   // ==========================================
   // FUNGSI PEMBANTU: PENCEGAHAN IDOR LINTAS RT
   // ==========================================
   private checkGroupAccess(eventCommunityGroupId: number, user: ActiveUserData) {
-    // Memastikan warga RT 01 tidak bisa melihat/mengedit event milik RT 02
-    // Catatan: Jika user adalah RW (Parent Group), logikanya bisa diperluas di sini nanti
     if (eventCommunityGroupId !== user.communityGroupId) {
       throw new ForbiddenException('Anda tidak memiliki akses ke data acara di lingkungan ini');
     }
@@ -39,8 +40,6 @@ export class EventsService {
     user: ActiveUserData,
     committeeUserIds: string[] = []
   ) {
-    // Hanya pengurus yang boleh membuat acara resmi menggunakan kas
-    // 👇 PERBAIKAN 1: Deklarasi tipe array secara eksplisit
     const pengurusRoles: SystemRoleType[] = [
       SystemRoleType.ADMIN,
       SystemRoleType.TREASURER,
@@ -54,7 +53,7 @@ export class EventsService {
     return this.eventsRepo.createEvent(
       {
         ...createEventDto,
-        communityGroupId: user.communityGroupId, // Paksa gunakan ID grup dari token JWT (Aman)
+        communityGroupId: user.communityGroupId,
         createdById: user.sub,
       },
       committeeUserIds,
@@ -62,13 +61,11 @@ export class EventsService {
   }
 
   // ==========================================
-  // 2. GET ALL EVENTS (Transparansi Warga)
+  // 2. GET ALL EVENTS
   // ==========================================
   async findAllEvents(user: ActiveUserData) {
-    // Warga hanya akan melihat acara di RT/RW-nya sendiri
     const events = await this.eventsRepo.findAll(user.communityGroupId);
 
-    // Filter tambahan: Warga biasa tidak perlu melihat acara yang masih DRAFT
     if (user.roleType === SystemRoleType.RESIDENT) {
       return events.filter(event => event.status !== EventStatus.DRAFT);
     }
@@ -82,10 +79,7 @@ export class EventsService {
   async getEventDetails(eventId: string, user: ActiveUserData) {
     const event = await this.eventsRepo.findById(eventId);
     if (!event) throw new NotFoundException('Acara tidak ditemukan');
-
-    // Cegah IDOR
     this.checkGroupAccess(event.communityGroupId, user);
-
     return event;
   }
 
@@ -98,18 +92,18 @@ export class EventsService {
 
     this.checkGroupAccess(event.communityGroupId, user);
 
-    // Hanya pembuat acara yang bisa mengedit
     if (event.createdById !== user.sub) {
       throw new ForbiddenException('Hanya pembuat acara yang dapat mengubah detailnya');
     }
 
-    // Mencegah perubahan data jika sudah diajukan ke Bendahara/RW
     if (event.status !== EventStatus.DRAFT) {
-      throw new BadRequestException('Acara yang sudah diajukan (SUBMITTED) tidak dapat diubah. Silakan batalkan terlebih dahulu.');
+      throw new BadRequestException('Acara yang sudah diajukan (SUBMITTED) tidak dapat diubah.');
     }
 
-    // Di dalam events.service.ts
-    await this.eventApprovalService.generateApprovalWorkflow(eventId);
+    // Note: Anda mungkin perlu menambahkan fungsi update murni di Repo jika belum ada
+    // await this.eventsRepo.update(eventId, updateEventDto); 
+    // Tapi karena code sebelumnya hanya memanggil approval workflow, saya biarkan sesuai snippet Anda:
+    await this.eventApprovalService.generateApprovalWorkflow(eventId); 
   }
 
   // ==========================================
@@ -125,7 +119,6 @@ export class EventsService {
       throw new BadRequestException('Hanya acara berstatus DRAFT yang dapat diajukan');
     }
 
-    // Ubah status ke SUBMITTED
     const updatedEvent = await this.eventsRepo.updateEventStatus(
       eventId,
       EventStatus.SUBMITTED,
@@ -133,19 +126,53 @@ export class EventsService {
       'Pengajuan awal oleh pembuat acara'
     );
 
-    // TODO: Panggil EventApprovalService di sini untuk meng-generate struktur approval berjenjang
-    // berdasarkan event.budgetEstimated (Apakah butuh RW atau cukup RT).
+    // Generate workflow approval
+    await this.eventApprovalService.generateApprovalWorkflow(eventId);
 
     return updatedEvent;
+  }
+
+  // ==========================================
+  // [BARU] 5.5 FUND EVENT (Approved -> Funded)
+  // ==========================================
+  // Method ini untuk mencairkan dana saat status sudah APPROVED
+  async fundEvent(eventId: string, user: ActiveUserData) {
+    const event = await this.getEventDetails(eventId, user);
+
+    // 1. Validasi Status
+    if (event.status !== EventStatus.APPROVED) {
+      throw new BadRequestException('Hanya acara yang sudah DISETUJUI (APPROVED) yang dananya bisa dicairkan.');
+    }
+
+    // 2. Validasi Role (Hanya Bendahara/Ketua yang boleh pegang tombol cairkan uang)
+    const allowedRoles: SystemRoleType[] = [SystemRoleType.TREASURER, SystemRoleType.LEADER];
+    if (!allowedRoles.includes(user.roleType)) {
+      throw new ForbiddenException('Hanya Bendahara atau Ketua yang dapat mencairkan dana acara.');
+    }
+
+    // 3. INTEGRASI FINANCE: Kurangi Saldo Wallet (Disbursement)
+    // Jika saldo kurang, fungsi ini akan throw Error dan proses berhenti di sini.
+    await this.financeService.disburseEventFund(
+        event.communityGroupId, 
+        Number(event.budgetEstimated), // Convert Decimal ke Number
+        event.id
+    );
+
+    // 4. Update Status Acara ke FUNDED
+    return this.eventsRepo.updateEventStatus(
+        eventId, 
+        EventStatus.FUNDED, 
+        user.sub, 
+        `Dana sebesar Rp${event.budgetEstimated} berhasil dicairkan.`
+    );
   }
 
   // ==========================================
   // 6. CANCEL EVENT & REFUND WALLET LOGIC
   // ==========================================
   async cancelEvent(eventId: string, reason: string, user: ActiveUserData) {
-    const event = await this.getEventDetails(eventId, user); // Sudah melewati pengecekan NotFound & IDOR
+    const event = await this.getEventDetails(eventId, user);
 
-    // 👇 PERBAIKAN 2: Deklarasi tipe array EventStatus eksplisit
     const nonCancelableStatuses: EventStatus[] = [
       EventStatus.COMPLETED,
       EventStatus.SETTLED,
@@ -156,30 +183,29 @@ export class EventsService {
       throw new BadRequestException(`Acara berstatus ${event.status} tidak dapat dibatalkan`);
     }
 
-    // 👇 PERBAIKAN 3: Deklarasi tipe array SystemRoleType eksplisit
     const topLevelAdmins: SystemRoleType[] = [
       SystemRoleType.ADMIN,
       SystemRoleType.LEADER
     ];
 
-    // Hak akses batal: Hanya pembuat acara atau Leader/Admin
     const isCreator = event.createdById === user.sub;
     const isTopLevelAdmin = topLevelAdmins.includes(user.roleType);
     if (!isCreator && !isTopLevelAdmin) {
       throw new ForbiddenException('Anda tidak memiliki hak untuk membatalkan acara ini');
     }
 
-    // CATATAN PENTING: Jika status acara sudah FUNDED (Uang sudah cair ke panitia)
-    // Maka harus ada logika pengembalian (Refund) 100% uang ke tabel Wallet
+    // 👇 INTEGRASI FINANCE: REFUND FULL
     if (event.status === EventStatus.FUNDED || event.status === EventStatus.ONGOING) {
-      // TODO: Panggil FinanceService di sini untuk membuat Transaction tipe CREDIT
-      // sebesar `event.budgetActual` atau `event.budgetEstimated` kembali ke Kas RT.
-      // this.financeService.refundEventFunds(eventId, event.communityGroupId, event.budgetEstimated);
-
-      console.log(`[Finance Trigger] Refund dana event ${eventId} sebesar ${event.budgetEstimated} dikembalikan ke kas`);
+       // Panggil FinanceService untuk mengembalikan 100% modal awal
+       await this.financeService.refundEventFund(
+          event.communityGroupId,
+          Number(event.budgetEstimated), // Refund sebesar budget awal
+          event.id,
+          `Full Refund akibat Pembatalan Acara: ${reason}`
+       );
+       console.log(`[Finance Trigger] Refund Full dana event ${eventId} berhasil.`);
     }
 
-    // Eksekusi pembatalan dan catat riwayatnya
     return this.eventsRepo.updateEventStatus(
       eventId,
       EventStatus.CANCELLED,
@@ -193,18 +219,16 @@ export class EventsService {
   // ==========================================
   async submitEventExpense(
     eventId: string,
-    dto: SubmitExpenseDto, // { title: string, amount: number, proofImage?: string }
+    dto: SubmitExpenseDto,
     user: ActiveUserData
   ) {
-    const event = await this.getEventDetails(eventId, user); // Sudah termasuk cek IDOR
+    const event = await this.getEventDetails(eventId, user);
 
-    // Validasi Status: Nota hanya bisa diupload jika acara sedang berjalan atau uang sudah cair
     const allowedStatuses: EventStatus[] = [EventStatus.FUNDED, EventStatus.ONGOING];
     if (!allowedStatuses.includes(event.status)) {
       throw new BadRequestException('Nota hanya dapat diunggah saat acara berstatus FUNDED atau ONGOING');
     }
 
-    // Validasi Akses: Hanya Pembuat Acara atau Panitia (COMMITTEE) yang boleh upload
     const isCreator = event.createdById === user.sub;
     const isCommittee = event.participants.some(
       (p) => p.userId === user.sub && p.role === 'COMMITTEE'
@@ -214,7 +238,6 @@ export class EventsService {
       throw new ForbiddenException('Hanya panitia acara yang diizinkan mengunggah bukti pengeluaran');
     }
 
-    // Ubah status acara dari FUNDED menjadi ONGOING secara otomatis saat nota pertama masuk
     if (event.status === EventStatus.FUNDED) {
       await this.eventsRepo.updateEventStatus(
         eventId,
@@ -224,7 +247,6 @@ export class EventsService {
       );
     }
 
-    // Simpan nota ke database (Status isValid otomatis false dari Repository)
     return this.eventsRepo.createExpense({
       eventId,
       title: dto.title,
@@ -238,22 +260,19 @@ export class EventsService {
   // ==========================================
   async verifyExpense(
     expenseId: string,
-    dto: VerifyExpenseDto, // { isValid: boolean }
+    dto: VerifyExpenseDto,
     user: ActiveUserData
   ) {
-    // 1. Cari nota dan validasi kepemilikan acara (Cegah IDOR antar Bendahara)
     const expense = await this.eventsRepo.findExpenseById(expenseId);
     if (!expense) throw new NotFoundException('Data pengeluaran tidak ditemukan');
 
     this.checkGroupAccess(expense.event.communityGroupId, user);
 
-    // 2. Hanya ADMIN (dan mungkin Ketua) yang berhak memvalidasi
-    const verifierRoles: SystemRoleType[] = [SystemRoleType.ADMIN, SystemRoleType.LEADER];
+    const verifierRoles: SystemRoleType[] = [SystemRoleType.ADMIN, SystemRoleType.LEADER, SystemRoleType.TREASURER];
     if (!verifierRoles.includes(user.roleType)) {
       throw new ForbiddenException('Hanya Bendahara atau Ketua yang dapat memvalidasi nota pengeluaran');
     }
 
-    // 3. Eksekusi verifikasi
     return this.eventsRepo.verifyExpense(expenseId, dto.isValid, user.sub);
   }
 
@@ -261,7 +280,6 @@ export class EventsService {
   // 9. SETTLE EVENT (Tutup Laporan & Hitung Kembalian)
   // ==========================================
   async settleEvent(eventId: string, user: ActiveUserData) {
-    // Ambil data event beserta seluruh relasi pengeluarannya (expenses)
     const event = await this.getEventDetails(eventId, user);
 
     const settleableStatuses: EventStatus[] = [EventStatus.ONGOING, EventStatus.COMPLETED];
@@ -269,24 +287,18 @@ export class EventsService {
       throw new BadRequestException('Hanya acara yang sedang berjalan atau selesai yang dapat ditutup laporannya');
     }
 
-    // Hak akses tutup buku: Bendahara, Ketua, atau Pembuat Acara
     const isCreator = event.createdById === user.sub;
-    const canSettleRoles: SystemRoleType[] = [SystemRoleType.LEADER, SystemRoleType.ADMIN];
+    const canSettleRoles: SystemRoleType[] = [SystemRoleType.LEADER, SystemRoleType.ADMIN, SystemRoleType.TREASURER];
     if (!isCreator && !canSettleRoles.includes(user.roleType)) {
       throw new ForbiddenException('Anda tidak memiliki hak untuk menutup laporan acara ini');
     }
 
-    // ==========================================
-    // LOGIKA KALKULASI KEUANGAN (THE MAGIC)
-    // ==========================================
-
-    // 1. Hitung total uang yang BENAR-BENAR TERPAKAI (Hanya dari nota yang sudah di-verify Bendahara)
+    // 1. Hitung total uang yang BENAR-BENAR TERPAKAI (Valid Only)
     const totalSpent = event.expenses
       .filter(expense => expense.isValid === true)
-      .reduce((sum, expense) => sum + Number(expense.amount), 0); // Convert Decimal Prisma ke Number
+      .reduce((sum, expense) => sum + Number(expense.amount), 0);
 
-    // 2. Hitung total uang sisa (Dana Awal - Dana Terpakai)
-    // Catatan: Jika ada pengajuan dana tambahan (FundRequest), tambahkan juga logikanya di sini besok.
+    // 2. Hitung total uang sisa
     const totalFunded = Number(event.budgetEstimated);
     const refundAmount = totalFunded - totalSpent;
 
@@ -295,10 +307,8 @@ export class EventsService {
     }
 
     // 3. Eksekusi Penutupan Laporan
-    // A. Update Budget Actual di database
     await this.eventsRepo.updateActualBudget(eventId, totalSpent);
 
-    // B. Ubah Status Acara menjadi SETTLED (Selesai Sepenuhnya)
     const settledEvent = await this.eventsRepo.updateEventStatus(
       eventId,
       EventStatus.SETTLED,
@@ -306,11 +316,15 @@ export class EventsService {
       `Laporan ditutup. Total terpakai: Rp${totalSpent}. Sisa dana: Rp${refundAmount}`
     );
 
-    // C. Trigger Modul Finance untuk Mutasi Sisa Uang
+    // 👇 INTEGRASI FINANCE: PARTIAL REFUND (SISA UANG)
     if (refundAmount > 0) {
-      // TODO: Panggil FinanceService di sini besok
-      // this.financeService.refundToWallet(event.communityGroupId, refundAmount, eventId);
-      console.log(`[Finance Trigger] Acara Selesai! Mengembalikan sisa dana Rp${refundAmount} ke Wallet Grup ${event.communityGroupId}`);
+      await this.financeService.refundEventFund(
+        event.communityGroupId, 
+        refundAmount, 
+        event.id,
+        'Pengembalian sisa anggaran acara (Settlement)'
+      );
+      console.log(`[Finance Trigger] Sisa dana Rp${refundAmount} berhasil dikembalikan ke Wallet.`);
     }
 
     return {

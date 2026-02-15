@@ -11,6 +11,7 @@ import { PrismaService } from '../../database/prisma.service';
 import * as midtransClient from 'midtrans-client';
 import { PaymentGatewayStatus, PaymentMethodCategory, SystemRoleType } from '@prisma/client';
 import { ActiveUserData } from '@common/decorators/active-user.decorator'; // <--- IMPORT BARU
+import { DuesService } from '@modules/finance/services/dues.service';
 
 @Injectable()
 export class PaymentService {
@@ -20,6 +21,7 @@ export class PaymentService {
   constructor(
     private readonly configService: ConfigService,
     private readonly paymentRepo: PaymentRepository,
+    private readonly duesService: DuesService,
     private readonly prisma: PrismaService, // INJECT PRISMA DI SINI
   ) {
     const isProduction = this.configService.get<boolean>('midtrans.isProduction', false);
@@ -244,6 +246,62 @@ export class PaymentService {
     } catch (error) {
       console.error('Webhook Verification Error:', error);
       throw new BadRequestException('Invalid notification data');
+    }
+  }
+
+  // ==========================================
+  // CREATE PAYMENT TOKEN (Bayar Iuran)
+  // ==========================================
+  async createDuesPayment(user: ActiveUserData) {
+    // 1. HITUNG TAGIHAN OTOMATIS
+    // Panggil fungsi yang sudah kita buat kemarin
+    const bill = await this.duesService.getMyBill(user);
+
+    // Validasi: Kalau total 0, ngapain bayar?
+    if (bill.totalAmount <= 0) {
+      throw new BadRequestException('Tidak ada tagihan iuran yang perlu dibayar saat ini.');
+    }
+
+    // 2. BUAT ORDER ID UNIK
+    // Format: DUES-{USER_ID}-{TIMESTAMP} agar tidak duplikat
+    const orderId = `DUES-${user.sub}-${Date.now()}`;
+
+    // 3. SIAPKAN PAYLOAD KE MIDTRANS
+    // Di sinilah kita "memaksa" Midtrans memakai harga hitungan kita
+    const parameter = {
+      transaction_details: {
+        order_id: orderId,
+        gross_amount: bill.totalAmount, // <--- INI KUNCINYA (30.000)
+      },
+      // Fitur Keren: Rincian Item (Warga bisa lihat di email invoice Midtrans)
+      item_details: bill.breakdown.map((item) => ({
+        id: `ITEM-${item.type}`,    // misal: ITEM-RT
+        price: item.amount,         // misal: 15000
+        quantity: 1,
+        name: item.groupName,       // misal: "Iuran RT 01"
+      })),
+      customer_details: {
+        first_name: user.email, // Atau nama user
+        email: user.email,
+      },
+      // Custom field untuk menyimpan User ID agar mudah saat Webhook nanti
+      custom_field1: user.sub, 
+    };
+
+    // 4. MINTA TOKEN KE MIDTRANS
+    try {
+      const transaction = await this.snap.createTransaction(parameter);
+      
+      // Kembalikan token dan url redirect ke Frontend
+      return {
+        token: transaction.token,
+        redirect_url: transaction.redirect_url,
+        amount: bill.totalAmount, // Info tambahan buat frontend
+        breakdown: bill.breakdown
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException('Gagal membuat transaksi pembayaran: ' + errorMessage);
     }
   }
 }

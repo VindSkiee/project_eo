@@ -26,6 +26,7 @@ export class PaymentController {
   // 1. ENDPOINT USER BISA DIAKSES SEMUA ROLE (MEMBER BISA BAYAR)
   // ==========================================
 
+  @Roles(SystemRoleType.RESIDENT)
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
   async createTransaction(
@@ -41,6 +42,7 @@ export class PaymentController {
     return this.paymentService.getPaymentHistory(user.sub); 
   }
 
+  @Roles(SystemRoleType.RESIDENT)
   @Post('refund')
   async requestRefund(
     @ActiveUser() user: ActiveUserData, 
@@ -111,5 +113,13 @@ export class PaymentController {
   @HttpCode(HttpStatus.OK)
   async handleNotification(@Body() notification: Record<string, any>) {
     return this.paymentService.handleNotification(notification);
+  }
+
+  @Post('pay-dues')
+  @HttpCode(HttpStatus.OK)
+  async payDues(@ActiveUser() user: ActiveUserData) {
+    // Frontend cukup panggil endpoint ini tanpa kirim body apa-apa
+    // Karena harga dihitung otomatis di backend
+    return this.paymentService.createDuesPayment(user);
   }
 }

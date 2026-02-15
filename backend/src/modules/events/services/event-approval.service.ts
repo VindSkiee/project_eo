@@ -27,7 +27,7 @@ export class EventApprovalService {
     // 1. Tarik semua aturan approval untuk RT tersebut
     const rules = await this.prisma.approvalRule.findMany({
       where: { communityGroupId: event.communityGroupId },
-      orderBy: { stepOrder: 'asc' }, // Urutkan: 1 (Bendahara RT) -> 2 (Ketua RT) -> 3 (RW)
+      orderBy: { stepOrder: 'asc' }, 
       include: { role: true },
     });
 
@@ -37,25 +37,27 @@ export class EventApprovalService {
 
     // 2. Filter aturan berdasarkan nominal anggaran (Dynamic Threshold)
     const applicableRules = rules.filter(rule => {
-      // Jika rule punya batas minimal (misal: 1.000.000), dan anggaran acara LEBIH KECIL dari batas itu,
-      // maka lewati rule ini (tidak butuh approval RW).
-      if (rule.minAmount && event.budgetEstimated < rule.minAmount) {
+      // Jika rule punya batas minimal, dan anggaran acara kurang dari batas itu, skip.
+      if (rule.minAmount && Number(event.budgetEstimated) < Number(rule.minAmount)) {
         return false; 
       }
       return true;
     });
 
-    const approvalRecords: {
+    const approvalRecords: Array<{
       eventId: string;
       approverId: string;
       roleSnapshot: string;
       stepOrder: number;
       status: ApprovalStatus;
-    }[] = [];
+      notes: string | null;
+      approvedAt: Date | null;
+    }> = [];
 
     // 3. Bangun data persetujuan & Cari siapa User yang menjabat
     for (const rule of applicableRules) {
       let targetGroupId = event.communityGroupId; 
+      // Jika aturan lintas grup (misal butuh RW), arahkan ke Parent
       if (rule.isCrossGroup && event.communityGroup.parentId) {
         targetGroupId = event.communityGroup.parentId;
       }
@@ -68,7 +70,7 @@ export class EventApprovalService {
         throw new BadRequestException(`Pengurus dengan jabatan ${rule.role.name} tidak ditemukan.`);
       }
 
-      // 👇 LOGIKA BARU: CEK APAKAH JABATAN INI DIPEGANG OLEH PEMBUAT ACARA?
+      // Cek: Apakah pejabat ini adalah si pembuat acara sendiri?
       const isCreator = approver.id === event.createdById;
 
       approvalRecords.push({
@@ -76,8 +78,11 @@ export class EventApprovalService {
         approverId: approver.id,
         roleSnapshot: rule.role.name,
         stepOrder: rule.stepOrder,
-        // Jika dia yang buat acaranya, langsung set statusnya APPROVED (Otomatis)
+        // Auto-approve jika yang menjabat adalah pembuat acara
         status: isCreator ? ApprovalStatus.APPROVED : ApprovalStatus.PENDING,
+        // Jika auto-approve, beri catatan otomatis
+        notes: isCreator ? 'Auto-approved (Creator is Approver)' : null,
+        approvedAt: isCreator ? new Date() : null,
       });
     }
 
@@ -111,7 +116,7 @@ export class EventApprovalService {
     }
 
     // 2. Cari TAHAP MANA yang sedang menunggu persetujuan
-    // (Persetujuan harus berurutan, tidak boleh lompat dari step 1 ke step 3)
+    // Ambil item pertama yang statusnya masih PENDING
     const pendingApproval = event.approvals.find(a => a.status === ApprovalStatus.PENDING);
 
     if (!pendingApproval) {
@@ -119,69 +124,99 @@ export class EventApprovalService {
     }
 
     // 3. Keamanan Tingkat Tinggi (Mencegah IDOR antar Pengurus)
-    // Pastikan yang menekan tombol Approve BENAR-BENAR User yang ditugaskan di step ini
     if (pendingApproval.approverId !== user.sub) {
       throw new ForbiddenException(`Bukan giliran Anda. Menunggu persetujuan dari ${pendingApproval.roleSnapshot}`);
     }
 
+    // Validasi Notes jika Reject
     if (dto.status === ApprovalStatus.REJECTED && !dto.notes) {
       throw new BadRequestException('Alasan penolakan (notes) wajib diisi');
     }
 
-    // 4. Eksekusi Perubahan (Menggunakan Transaksi agar Aman)
+    // 4. Eksekusi Perubahan (Atomic Transaction)
     return this.prisma.$transaction(async (tx) => {
-      // a. Update status di tabel EventApproval
+      // a. Update status di tabel EventApproval (Tanda tangan digital user)
       await tx.eventApproval.update({
         where: { id: pendingApproval.id },
-        data: { status: dto.status, notes: dto.notes },
+        data: { 
+            status: dto.status, 
+            notes: dto.notes,
+            approvedAt: new Date() // Catat waktu persetujuan
+        },
       });
 
-      // b. Logika penentuan status Event (Induk)
+      // b. Logika REJECT (Gagal Total)
       if (dto.status === ApprovalStatus.REJECTED) {
-        // Jika ada 1 saja yang REJECT, status Event langsung REJECTED
         await tx.event.update({
           where: { id: eventId },
           data: { status: EventStatus.REJECTED }
         });
 
-        await this.recordStatusHistory(tx, eventId, user.sub, event.status, EventStatus.REJECTED, dto.notes);
-        return { message: 'Acara ditolak' };
-
-      } else if (dto.status === ApprovalStatus.APPROVED) {
+        await this.recordStatusHistory(
+            tx, eventId, user.sub, event.status, EventStatus.REJECTED, 
+            `Ditolak oleh ${pendingApproval.roleSnapshot}: ${dto.notes}`
+        );
         
-        // 👇 LOGIKA BARU YANG LEBIH CERDAS DAN ANTI-BUG
-        // Hitung berapa total tahapan yang statusnya MASIH PENDING.
-        // Karena 1 tahapan sedang diproses menjadi APPROVED saat ini, 
-        // jika jumlah pendingCount adalah 1, berarti ini adalah orang terakhir!
-        const pendingCount = event.approvals.filter(a => a.status === ApprovalStatus.PENDING).length;
-        const isLastStep = pendingCount === 1;
+        return { message: 'Acara ditolak.' };
+      } 
+      
+      // c. Logika APPROVE (Cek Kelanjutan)
+      else if (dto.status === ApprovalStatus.APPROVED) {
+        
+        // Cek apakah ada step approval lain yang urutannya (stepOrder) LEBIH BESAR dari step ini?
+        const nextStep = event.approvals.find(a => a.stepOrder > pendingApproval.stepOrder);
 
-        if (isLastStep) {
-          // 🎉 SELURUH RANTAI SELESAI (Tidak ada lagi yang PENDING)
+        if (!nextStep) {
+          // 🎉 TIDAK ADA step selanjutnya -> Berarti ini FINAL STEP!
+          
           await tx.event.update({
             where: { id: eventId },
-            data: { status: EventStatus.APPROVED }
+            data: { status: EventStatus.APPROVED } // Ubah jadi APPROVED (Siap dicairkan)
           });
-          await this.recordStatusHistory(tx, eventId, user.sub, event.status, EventStatus.APPROVED, 'Telah disetujui sepenuhnya');
+          
+          await this.recordStatusHistory(
+              tx, eventId, user.sub, event.status, EventStatus.APPROVED, 
+              'Telah disetujui sepenuhnya. Menunggu pencairan dana oleh Bendahara.'
+          );
           
           return { message: 'Acara disetujui sepenuhnya! Menunggu pencairan dana.' };
+
         } else {
-          // Masih ada tahap PENDING lainnya
-          if (event.status === EventStatus.SUBMITTED) {
+          // ⏳ MASIH ADA step selanjutnya -> Status tetap UNDER_REVIEW
+          
+          // Pastikan status event berubah jadi UNDER_REVIEW (jika sebelumnya masih SUBMITTED)
+          if (event.status !== EventStatus.UNDER_REVIEW) {
             await tx.event.update({
               where: { id: eventId },
               data: { status: EventStatus.UNDER_REVIEW }
             });
-            await this.recordStatusHistory(tx, eventId, user.sub, event.status, EventStatus.UNDER_REVIEW, 'Disetujui sebagian');
+            
+            await this.recordStatusHistory(
+                tx, eventId, user.sub, event.status, EventStatus.UNDER_REVIEW, 
+                `Disetujui oleh ${pendingApproval.roleSnapshot}, lanjut ke tahap berikutnya.`
+            );
+          } else {
+             // 📝 LOGGING PROGRES (Audit Trail)
+             // Status event tidak berubah (tetap UNDER_REVIEW), tapi kita perlu mencatat
+             // bahwa satu tahap approval sudah selesai.
+             await this.recordStatusHistory(
+                tx, 
+                eventId, 
+                user.sub, 
+                EventStatus.UNDER_REVIEW, // Status Awal
+                EventStatus.UNDER_REVIEW, // Status Akhir (Tetap sama)
+                `Disetujui oleh ${pendingApproval.roleSnapshot} (Tahap ${pendingApproval.stepOrder}). Melanjutkan ke pejabat berikutnya.`
+             );
           }
-          return { message: `Persetujuan berhasil. Menunggu pengurus lain.` };
+
+          return { message: `Persetujuan berhasil. Menunggu pengurus tahap berikutnya.` };
         }
       }
     });
   }
 
   // ==========================================
-  // FUNGSI PEMBANTU: AUDIT TRAIL DALAM TRANSAKSI
+  // FUNGSI PEMBANTU: AUDIT TRAIL
   // ==========================================
   private async recordStatusHistory(
     tx: any, 
