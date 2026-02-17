@@ -44,7 +44,6 @@ import {
   Loader2,
   ChevronDown,
   Pencil,
-  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
