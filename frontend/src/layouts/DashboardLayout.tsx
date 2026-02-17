@@ -6,7 +6,8 @@ import {
   Users, 
   UserCircle, 
   LogOut, 
-  Menu
+  Menu,
+  Building2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,19 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { toast } from "sonner";
+import { authService } from "@/services/authService";
 
 // Tipe data user dari LocalStorage
 interface User {
@@ -30,6 +43,7 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
   // 1. Ambil Data User Saat Komponen Dimuat
   useEffect(() => {
@@ -40,9 +54,15 @@ export default function DashboardLayout() {
   }, []);
 
   // 2. Fungsi Logout
-  const handleLogout = () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      toast.success("Berhasil keluar.");
+    } catch {
+      // Fallback: clear manually if API fails
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("user");
+    }
     navigate("/login");
   };
 
@@ -65,6 +85,7 @@ export default function DashboardLayout() {
     else {
       // Default / RESIDENT
       menu.push({ title: "Beranda Warga", path: "/dashboard/warga", icon: LayoutDashboard });
+      menu.push({ title: "Organisasi", path: "/dashboard/organisasi", icon: Building2 });
     }
 
     // Menu global untuk semua role
@@ -142,7 +163,7 @@ export default function DashboardLayout() {
       {/* Logout */}
       <div className={`py-4 ${collapsed ? 'px-3' : 'px-5'}`}>
         <button
-          onClick={handleLogout}
+          onClick={() => setShowLogoutDialog(true)}
           className={`flex items-center gap-4 w-full rounded-xl text-white/70 hover:bg-red-500/20 hover:text-red-300 transition-all duration-200 text-[14px] font-medium leading-[20px] ${collapsed ? 'px-3 py-[14px] justify-center' : 'px-4 py-[14px]'}`}
           title={collapsed ? "Keluar" : undefined}
         >
@@ -211,6 +232,27 @@ export default function DashboardLayout() {
         </div>
 
       </main>
+
+      {/* Logout Confirmation Dialog */}
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-poppins">Konfirmasi Keluar</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin keluar dari akun ini? Anda perlu login kembali untuk mengakses dashboard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Ya, Keluar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

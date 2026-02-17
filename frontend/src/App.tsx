@@ -4,10 +4,11 @@ import { Toaster } from "@/components/ui/sonner";
 // --- IMPORT PAGES & LAYOUT ---
 import LoginPage from "@/pages/auth/LoginPage";
 import DashboardLayout from "@/layouts/DashboardLayout";
-import LeaderDashboard from "@/pages/dashboard/LeaderDashboard";
-import AdminDashboard from "@/pages/dashboard/AdminDashboard";
-import ResidentDashboard from "@/pages/dashboard/ResidentDashboard";
-import FinanceDashboard from "@/pages/dashboard/FinanceDashboard";
+import LeaderDashboard from "@/pages/dashboard/RW/LeaderDashboard";
+import AdminDashboard from "@/pages/dashboard/RT/AdminDashboard";
+import ResidentDashboard from "@/pages/dashboard/Warga/ResidentDashboard";
+import FinanceDashboard from "@/pages/dashboard/Bendahara/FinanceDashboard";
+import OrganizationPage from "@/pages/dashboard/Shared/OrganizationPage";
 
 // --- 1. UTILITY FUNCTIONS ---
 const isAuthenticated = () => {
@@ -113,6 +114,7 @@ function App() {
                 {/* RW, RT, dan Warga boleh buka halaman warga (misal untuk lihat pengumuman) */}
                 <Route element={<RoleProtectedRoute allowedRoles={["RESIDENT"]} />}>
                   <Route path="warga" element={<ResidentDashboard />} />
+                  <Route path="organisasi" element={<OrganizationPage />} />
                 </Route>
 
                 {/* Profil bisa dibuka oleh SEMUA role yang sudah login */}
