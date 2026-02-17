@@ -1,7 +1,6 @@
 import { PrismaClient, SystemRoleType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
-// Inisialisasi Prisma Client Standard (Versi 5)
 const prisma = new PrismaClient({
   log: ['query', 'info', 'warn', 'error'],
 });
@@ -13,11 +12,10 @@ async function main() {
   // 1. MASTER ROLES
   // ==========================================
   const rolesData = [
-    { name: 'Ketua RW', type: SystemRoleType.LEADER },
-    { name: 'Ketua RT', type: SystemRoleType.ADMIN },
-    { name: 'Bendahara RW', type: SystemRoleType.TREASURER },
-    { name: 'Bendahara RT', type: SystemRoleType.TREASURER },
-    { name: 'Warga', type: SystemRoleType.RESIDENT },
+    { name: 'ADMIN', type: SystemRoleType.ADMIN },
+    { name: 'LEADER', type: SystemRoleType.LEADER },
+    { name: 'TREASURER', type: SystemRoleType.TREASURER },
+    { name: 'RESIDENT', type: SystemRoleType.RESIDENT },
   ];
 
   const roleMap = new Map<string, number>();
@@ -26,70 +24,73 @@ async function main() {
     const role = await prisma.role.upsert({
       where: { name: r.name },
       update: {},
-      create: { name: r.name, type: r.type },
+      create: {
+        name: r.name,
+        type: r.type,
+      },
     });
+
     roleMap.set(r.name, role.id);
   }
 
   // ==========================================
-  // 2. COMMUNITY GROUPS (RT/RW)
+  // 2. COMMUNITY GROUPS (RW / RT)
   // ==========================================
-  
-  // RW 05 Center
+
   const rwGroup = await prisma.communityGroup.upsert({
-    where: { id: 1 }, // Asumsi ID 1, atau bisa pakai unique name jika ada
+    where: { id: 1 },
     update: {},
-    create: { 
-      name: 'RW 05 Center', 
+    create: {
+      name: 'RW 05 Center',
       type: 'RW',
-      wallet: { create: { balance: 0 } }
+      wallet: { create: { balance: 0 } },
     },
   });
 
-  // RT 01
   const rt01 = await prisma.communityGroup.upsert({
     where: { id: 2 },
     update: {},
-    create: { 
-      name: 'RT 01', 
+    create: {
+      name: 'RT 01',
       type: 'RT',
       parentId: rwGroup.id,
-      wallet: { create: { balance: 0 } }
+      wallet: { create: { balance: 0 } },
     },
   });
 
   // ==========================================
-  // 3. USERS (4 AKUN UTAMA)
+  // 3. USERS
   // ==========================================
+
   const password = await bcrypt.hash('123456', 10);
 
-  // 1. KETUA RW (rw@warga.id)
+  // ADMIN RW
   await prisma.user.upsert({
     where: { email: 'rw@warga.id' },
-    update: {}, // Jika sudah ada, jangan lakukan apa-apa
+    update: {},
     create: {
       email: 'rw@warga.id',
       fullName: 'Bapak Ketua RW',
       password,
-      roleId: roleMap.get('Ketua RW')!,
+      roleId: roleMap.get('ADMIN')!,
       communityGroupId: rwGroup.id,
     },
   });
 
-  // 2. KETUA RT (rt01@warga.id)
+  // LEADER RT
   await prisma.user.upsert({
     where: { email: 'rt01@warga.id' },
     update: {},
     create: {
       email: 'rt01@warga.id',
-      fullName: 'Bapak RT Satu',
+      fullName: 'Bapak Ketua RT',
       password,
-      roleId: roleMap.get('Ketua RT')!,
+      roleId: roleMap.get('LEADER')!,
       communityGroupId: rt01.id,
     },
   });
 
-  // 3. BENDAHARA RW (bendahara.rw@warga.id) <-- YANG TADI HILANG
+  // TREASURER RW
   await prisma.user.upsert({
     where: { email: 'bendahara.rw@warga.id' },
     update: {},
@@ -97,12 +98,12 @@ async function main() {
       email: 'bendahara.rw@warga.id',
       fullName: 'Ibu Bendahara RW',
       password,
-      roleId: roleMap.get('Bendahara RW')!,
+      roleId: roleMap.get('TREASURER')!,
       communityGroupId: rwGroup.id,
     },
   });
 
-  // 4. WARGA BIASA (warga01@warga.id) <-- YANG TADI HILANG
+  // RESIDENT
   await prisma.user.upsert({
     where: { email: 'warga01@warga.id' },
     update: {},
@@ -110,12 +111,12 @@ async function main() {
       email: 'warga01@warga.id',
       fullName: 'Udin Warga',
       password,
-      roleId: roleMap.get('Warga')!,
+      roleId: roleMap.get('RESIDENT')!,
       communityGroupId: rt01.id,
     },
   });
 
-  console.log('✅ Seeding Selesai! (4 Akun Siap)');
+  console.log('✅ Seeding selesai! 4 akun siap.');
 }
 
 main()

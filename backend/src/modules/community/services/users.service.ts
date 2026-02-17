@@ -68,7 +68,7 @@ export class UsersService {
       address: dto.address,
       role: { connect: { id: role.id } },
       communityGroup: { connect: { id: targetGroupId } },
-      createdBy: { connect: { id: requester.sub } }, 
+      createdBy: { connect: { id: requester.id } }, 
     });
 
     return this.sanitizeUser(newUser);
@@ -323,5 +323,19 @@ export class UsersService {
         `Grup ini sudah memiliki Bendahara (Treasurer). Satu grup hanya boleh memiliki 1 Bendahara.`
       );
     }
+  }
+
+  async getMyProfile(userId: string) {
+    const user = await this.usersRepository.findUserProfile(userId);
+
+    if (!user) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    // 🛡️ SECURITY: Hapus password dari object sebelum return
+    // Teknik Destructuring: Ambil password, sisanya masukkan ke variable 'result'
+    const { password, ...result } = user;
+
+    return result;
   }
 }

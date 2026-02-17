@@ -36,7 +36,7 @@ export class PaymentController {
     @Body() createTransactionDto: CreateTransactionDto
   ) {
     const orderId = createTransactionDto.orderId || `EO-PAY-${Date.now()}`;
-    return this.paymentService.createTransaction(user.sub, orderId, createTransactionDto.amount);
+    return this.paymentService.createTransaction(user.id, orderId, createTransactionDto.amount);
   }
 
   // Endpoint: GET /payment/history
@@ -56,12 +56,12 @@ export class PaymentController {
     @ActiveUser() user: ActiveUserData, 
     @Body() requestRefundDto: RequestRefundDto
   ) {
-    // Service idealnya juga butuh user.sub untuk memastikan user ini yg berhak request
+    // Service idealnya juga butuh user.id untuk memastikan user ini yg berhak request
     return this.paymentService.requestRefund(
       requestRefundDto.paymentId, 
       requestRefundDto.amount, 
       requestRefundDto.reason,
-      user.sub
+      user.id
     );
   }
 

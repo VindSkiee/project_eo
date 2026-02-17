@@ -46,7 +46,7 @@ export class PaymentService {
 
     const isPengurus = pengurusRoles.includes(user.roleType);
 
-    if (!isPengurus && paymentUserId !== user.sub) {
+    if (!isPengurus && paymentUserId !== user.id) {
       throw new ForbiddenException('Anda tidak memiliki akses ke transaksi ini');
     }
   }
@@ -152,11 +152,11 @@ export class PaymentService {
   async getPaymentHistory(requester: ActiveUserData, targetUserId?: string) {
     // 1. Tentukan siapa User yang datanya mau diambil (Subject)
     // Jika targetUserId kosong, berarti dia mau lihat data sendiri.
-    const userIdToQuery = targetUserId || requester.sub;
+    const userIdToQuery = targetUserId || requester.id;
 
     // 2. CEK IDOR (Authorization Check)
     // Jika User yang Request BEDA dengan User yang Datanya Diambil...
-    if (userIdToQuery !== requester.sub) {
+    if (userIdToQuery !== requester.id) {
        
        // ...Maka yang Request WAJIB Admin/Bendahara/Ketua
        const allowedRoles: SystemRoleType[] = [
@@ -367,13 +367,13 @@ export class PaymentService {
     }
 
     // 2. GENERATE ORDER ID
-    const orderId = `DUES-${user.sub}-${Date.now()}`;
+    const orderId = `DUES-${user.id}-${Date.now()}`;
 
     // 3. 👇 TAMBAHAN PENTING: SIMPAN DRAFT KE DB DULU!
     // Kita pakai repo yang sama seperti createTransaction
     await this.paymentRepo.createTransaction({
       orderId: orderId,
-      userId: user.sub,
+      userId: user.id,
       amount: bill.totalAmount,
       grossAmount: bill.totalAmount,
       // Bisa tambah field metadata/description kalau perlu
@@ -395,7 +395,7 @@ export class PaymentService {
         first_name: user.email,
         email: user.email,
       },
-      custom_field1: user.sub,
+      custom_field1: user.id,
     };
 
     // 5. MINTA TOKEN

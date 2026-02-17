@@ -41,9 +41,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       );
     }
 
-    // Buang password
-    const { password, ...result } = user as any;
-
-    return result;
+    // Transform database structure to match ActiveUserData interface
+    // Flatten the nested role object to roleType
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      roleId: user.roleId,
+      roleType: user.role.type,              // ← Flatten role.type to roleType
+      communityGroupId: user.communityGroupId,
+      role: user.role,                        // ← Keep for RolesGuard compatibility
+      communityGroup: user.communityGroup,   // ← Keep for wallet access
+    };
   }
 }

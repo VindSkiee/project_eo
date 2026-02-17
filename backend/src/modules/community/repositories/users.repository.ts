@@ -88,4 +88,23 @@ export class UsersRepository {
   async count(where: Prisma.UserWhereInput): Promise<number> {
     return this.prisma.user.count({ where });
   }
+
+  async findUserProfile(id: string): Promise<UserWithRelations | null> {
+    // Saat ini logicnya sama dengan findById. 
+    // Tapi jika nanti dashboard butuh data extra (misal: 5 transaksi terakhir),
+    // kita cukup ubah 'include' di sini tanpa merusak fitur login lain.
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        role: true,
+        communityGroup: {
+          include: {
+            wallet: true,
+            duesRule: true, // Optional: User biasanya butuh tahu aturan iuran RT-nya
+            parent: true,   // Optional: User butuh tahu RW-nya siapa
+          },
+        },
+      },
+    });
+  }
 }

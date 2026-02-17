@@ -54,7 +54,7 @@ export class EventsService {
       {
         ...createEventDto,
         communityGroupId: user.communityGroupId,
-        createdById: user.sub,
+        createdById: user.id,
       },
       committeeUserIds,
     );
@@ -92,7 +92,7 @@ export class EventsService {
 
     this.checkGroupAccess(event.communityGroupId, user);
 
-    if (event.createdById !== user.sub) {
+    if (event.createdById !== user.id) {
       throw new ForbiddenException('Hanya pembuat acara yang dapat mengubah detailnya');
     }
 
@@ -100,10 +100,28 @@ export class EventsService {
       throw new BadRequestException('Acara yang sudah diajukan (SUBMITTED) tidak dapat diubah.');
     }
 
-    // Note: Anda mungkin perlu menambahkan fungsi update murni di Repo jika belum ada
-    // await this.eventsRepo.update(eventId, updateEventDto); 
-    // Tapi karena code sebelumnya hanya memanggil approval workflow, saya biarkan sesuai snippet Anda:
-    await this.eventApprovalService.generateApprovalWorkflow(eventId); 
+    return this.eventsRepo.updateEvent(eventId, updateEventDto);
+  }
+
+  // ==========================================
+  // 4.5 DELETE EVENT (Hanya saat DRAFT)
+  // ==========================================
+  async deleteEvent(eventId: string, user: ActiveUserData) {
+    const event = await this.eventsRepo.findById(eventId);
+    if (!event) throw new NotFoundException('Acara tidak ditemukan');
+
+    this.checkGroupAccess(event.communityGroupId, user);
+
+    if (event.createdById !== user.id) {
+      throw new ForbiddenException('Hanya pembuat acara yang dapat menghapusnya');
+    }
+
+    if (event.status !== EventStatus.DRAFT) {
+      throw new BadRequestException('Acara yang sudah diajukan (SUBMITTED) tidak dapat dihapus.');
+    }
+
+    await this.eventsRepo.deleteEvent(eventId);
+    return { message: 'Acara berhasil dihapus' };
   }
 
   // ==========================================
@@ -122,7 +140,7 @@ export class EventsService {
     const updatedEvent = await this.eventsRepo.updateEventStatus(
       eventId,
       EventStatus.SUBMITTED,
-      user.sub,
+      user.id,
       'Pengajuan awal oleh pembuat acara'
     );
 
@@ -162,7 +180,7 @@ export class EventsService {
     return this.eventsRepo.updateEventStatus(
         eventId, 
         EventStatus.FUNDED, 
-        user.sub, 
+        user.id, 
         `Dana sebesar Rp${event.budgetEstimated} berhasil dicairkan.`
     );
   }
@@ -188,7 +206,7 @@ export class EventsService {
       SystemRoleType.LEADER
     ];
 
-    const isCreator = event.createdById === user.sub;
+    const isCreator = event.createdById === user.id;
     const isTopLevelAdmin = topLevelAdmins.includes(user.roleType);
     if (!isCreator && !isTopLevelAdmin) {
       throw new ForbiddenException('Anda tidak memiliki hak untuk membatalkan acara ini');
@@ -209,7 +227,7 @@ export class EventsService {
     return this.eventsRepo.updateEventStatus(
       eventId,
       EventStatus.CANCELLED,
-      user.sub,
+      user.id,
       `Dibatalkan: ${reason}`
     );
   }
@@ -229,9 +247,9 @@ export class EventsService {
       throw new BadRequestException('Nota hanya dapat diunggah saat acara berstatus FUNDED atau ONGOING');
     }
 
-    const isCreator = event.createdById === user.sub;
+    const isCreator = event.createdById === user.id;
     const isCommittee = event.participants.some(
-      (p) => p.userId === user.sub && p.role === 'COMMITTEE'
+      (p) => p.userId === user.id && p.role === 'COMMITTEE'
     );
 
     if (!isCreator && !isCommittee) {
@@ -242,7 +260,7 @@ export class EventsService {
       await this.eventsRepo.updateEventStatus(
         eventId,
         EventStatus.ONGOING,
-        user.sub,
+        user.id,
         'Nota pertama diunggah, acara otomatis menjadi ONGOING'
       );
     }
@@ -273,7 +291,7 @@ export class EventsService {
       throw new ForbiddenException('Hanya Bendahara atau Ketua yang dapat memvalidasi nota pengeluaran');
     }
 
-    return this.eventsRepo.verifyExpense(expenseId, dto.isValid, user.sub);
+    return this.eventsRepo.verifyExpense(expenseId, dto.isValid, user.id);
   }
 
   // ==========================================
@@ -287,7 +305,7 @@ export class EventsService {
       throw new BadRequestException('Hanya acara yang sedang berjalan atau selesai yang dapat ditutup laporannya');
     }
 
-    const isCreator = event.createdById === user.sub;
+    const isCreator = event.createdById === user.id;
     const canSettleRoles: SystemRoleType[] = [SystemRoleType.LEADER, SystemRoleType.ADMIN, SystemRoleType.TREASURER];
     if (!isCreator && !canSettleRoles.includes(user.roleType)) {
       throw new ForbiddenException('Anda tidak memiliki hak untuk menutup laporan acara ini');
@@ -312,7 +330,7 @@ export class EventsService {
     const settledEvent = await this.eventsRepo.updateEventStatus(
       eventId,
       EventStatus.SETTLED,
-      user.sub,
+      user.id,
       `Laporan ditutup. Total terpakai: Rp${totalSpent}. Sisa dana: Rp${refundAmount}`
     );
 

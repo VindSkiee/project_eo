@@ -16,12 +16,12 @@ import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { ChangePasswordDto } from '../dto/change-password.dto';
 import { UserFilterDto } from '../dto/user-filter.dto';
+import { UpdateUserDto } from '../dto/update-user.dto';
 
 // Security Decorators
 import { Roles } from '@common/decorators/roles.decorator';
 import { ActiveUser } from '@common/decorators/active-user.decorator';
 import type { ActiveUserData } from '@common/decorators/active-user.decorator';
-import { UpdateUserDto } from '../dto/update-user.dto';
 
 @Controller('users')
 export class UsersController {
@@ -29,14 +29,46 @@ export class UsersController {
 
   /**
    * =========================================
-   * ADMIN & LEADER AREA (Manajemen Warga)
+   * 🚨 PRIORITAS TERTINGGI (STATIC ROUTES) 🚨
+   * Taruh route statis (tanpa :id) DI SINI.
    * =========================================
    */
 
+  @Get('me')
+  async getMe(@ActiveUser() user: ActiveUserData) {
+    
+    // Cek apakah sub ada? Atau malah tersimpan di property 'id'?
+    const userId = user.id; 
+
+    if (!userId) {
+        throw new Error(`User ID is undefined! Isi object user adalah: ${JSON.stringify(user)}`);
+    }
+
+    return this.usersService.getMyProfile(userId);
+  }
+
+  @Patch('profile')
+  updateProfile(
+    @ActiveUser() user: ActiveUserData,
+    @Body() updateProfileDto: UpdateProfileDto
+  ) {
+    return this.usersService.updateProfile(user.id, updateProfileDto);
+  }
+
+  @Patch('change-password')
+  changePassword(
+    @ActiveUser() user: ActiveUserData,
+    @Body() changePasswordDto: ChangePasswordDto
+  ) {
+    return this.usersService.changePassword(user.id, changePasswordDto);
+  }
+
   /**
-   * CREATE USER (Mendaftarkan Warga)
-   * Akses: ADMIN (RT) & LEADER (RW)
+   * =========================================
+   * ADMIN ROUTES
+   * =========================================
    */
+
   @Post()
   @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
   create(
@@ -46,11 +78,6 @@ export class UsersController {
     return this.usersService.create(requester, createUserDto);
   }
 
-  /**
-   * GET ALL USERS (Daftar Warga)
-   * Akses: ADMIN (RT) & LEADER (RW)
-   * Service otomatis memfilter agar RT tidak melihat warga RT lain.
-   */
   @Get()
   @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
   findAll(
@@ -61,9 +88,12 @@ export class UsersController {
   }
 
   /**
-   * DELETE USER (Soft Delete)
-   * Akses: ADMIN (RT) & LEADER (RW)
+   * =========================================
+   * ⚠️ DYNAMIC ROUTES (PARAMETER) ⚠️
+   * Taruh route dengan :id DI PALING BAWAH
+   * =========================================
    */
+
   @Delete(':id')
   @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
   remove(
@@ -73,59 +103,14 @@ export class UsersController {
     return this.usersService.remove(id, requester);
   }
 
-  /**
-   * =========================================
-   * SELF SERVICE AREA (Akun Pribadi)
-   * =========================================
-   */
-
-  /**
-   * UPDATE PROFILE (Diri Sendiri)
-   * Akses: Semua User Login
-   * Note: Kita pakai `user.sub` dari token, bukan `:id` dari URL agar aman.
-   */
-  @Patch('profile')
-  updateProfile(
-    @ActiveUser() user: ActiveUserData,
-    @Body() updateProfileDto: UpdateProfileDto
-  ) {
-    return this.usersService.updateProfile(user.sub, updateProfileDto);
-  }
-
-  /**
-   * CHANGE PASSWORD (Diri Sendiri)
-   * Akses: Semua User Login
-   */
-  @Patch('change-password')
-  changePassword(
-    @ActiveUser() user: ActiveUserData,
-    @Body() changePasswordDto: ChangePasswordDto
-  ) {
-    return this.usersService.changePassword(user.sub, changePasswordDto);
-  }
-
-  /**
-   * =========================================
-   * GENERAL ACCESS
-   * =========================================
-   */
-
-  /**
-   * GET ONE USER (Detail Profile)
-   * Akses: Semua User Login
-   * Gunanya: Untuk melihat detail tetangga atau profile sendiri via ID.
-   * Note: Password disembunyikan oleh service.
-   */
-  @Get(':id')
+  // 👇 INI YANG TADI MENANGKAP 'me'
+  // Sekarang dia aman di bawah, hanya menangkap jika route di atas tidak cocok.
+  @Get(':id') 
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
   }
 
-  /**
-   * UPDATE USER BY ADMIN (Koreksi Data)
-   * Akses: ADMIN (RT) & LEADER (RW)
-   */
-  @Patch(':id') // Hati-hati jangan tertukar dengan @Patch('profile')
+  @Patch(':id')
   @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
   update(
     @Param('id') id: string,

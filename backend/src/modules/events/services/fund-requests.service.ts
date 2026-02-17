@@ -48,7 +48,7 @@ export class FundRequestsService {
         amount: dto.amount,
         description: dto.description,
         eventId: dto.eventId,
-        createdById: user.sub,
+        createdById: user.id,
         status: FundRequestStatus.PENDING,
       }
     });
@@ -99,7 +99,7 @@ export class FundRequestsService {
         where: { id: fundRequestId },
         data: { 
           status: FundRequestStatus.APPROVED,
-          approvedById: user.sub
+          approvedById: user.id
         }
       });
 
@@ -121,7 +121,7 @@ export class FundRequestsService {
           await tx.eventStatusHistory.create({
             data: {
               eventId: fundReq.eventId,
-              changedById: user.sub,
+              changedById: user.id,
               previousStatus: currentEvent.status,
               newStatus: currentEvent.status,
               reason: `Pengajuan dana tambahan sebesar Rp${fundReq.amount} telah disetujui oleh RW.`
@@ -151,7 +151,7 @@ export class FundRequestsService {
       // A. Update status menjadi ditolak
       await tx.fundRequest.update({
         where: { id: fundRequestId },
-        data: { status: FundRequestStatus.REJECTED, approvedById: user.sub }
+        data: { status: FundRequestStatus.REJECTED, approvedById: user.id }
       });
 
       if (!fundReq.eventId || !fundReq.event) {
@@ -168,7 +168,7 @@ export class FundRequestsService {
         await tx.eventStatusHistory.create({
           data: {
             eventId: fundReq.eventId,
-            changedById: user.sub,
+            changedById: user.id,
             previousStatus: fundReq.event.status,
             newStatus: EventStatus.CANCELLED,
             reason: `[DANA DITOLAK]: ${dto.reason}. RW mengambil keputusan untuk MEMBATALKAN acara.`
@@ -198,7 +198,7 @@ export class FundRequestsService {
         await tx.eventStatusHistory.create({
           data: {
             eventId: fundReq.eventId,
-            changedById: user.sub,
+            changedById: user.id,
             previousStatus: fundReq.event.status,
             newStatus: fundReq.event.status,
             reason: `[DANA DITOLAK]: ${dto.reason}. RW memerintahkan acara TETAP BERJALAN dengan anggaran awal.`

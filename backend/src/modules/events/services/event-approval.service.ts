@@ -124,7 +124,7 @@ export class EventApprovalService {
     }
 
     // 3. Keamanan Tingkat Tinggi (Mencegah IDOR antar Pengurus)
-    if (pendingApproval.approverId !== user.sub) {
+    if (pendingApproval.approverId !== user.id) {
       throw new ForbiddenException(`Bukan giliran Anda. Menunggu persetujuan dari ${pendingApproval.roleSnapshot}`);
     }
 
@@ -153,7 +153,7 @@ export class EventApprovalService {
         });
 
         await this.recordStatusHistory(
-            tx, eventId, user.sub, event.status, EventStatus.REJECTED, 
+            tx, eventId, user.id, event.status, EventStatus.REJECTED, 
             `Ditolak oleh ${pendingApproval.roleSnapshot}: ${dto.notes}`
         );
         
@@ -175,7 +175,7 @@ export class EventApprovalService {
           });
           
           await this.recordStatusHistory(
-              tx, eventId, user.sub, event.status, EventStatus.APPROVED, 
+              tx, eventId, user.id, event.status, EventStatus.APPROVED, 
               'Telah disetujui sepenuhnya. Menunggu pencairan dana oleh Bendahara.'
           );
           
@@ -192,7 +192,7 @@ export class EventApprovalService {
             });
             
             await this.recordStatusHistory(
-                tx, eventId, user.sub, event.status, EventStatus.UNDER_REVIEW, 
+                tx, eventId, user.id, event.status, EventStatus.UNDER_REVIEW, 
                 `Disetujui oleh ${pendingApproval.roleSnapshot}, lanjut ke tahap berikutnya.`
             );
           } else {
@@ -202,7 +202,7 @@ export class EventApprovalService {
              await this.recordStatusHistory(
                 tx, 
                 eventId, 
-                user.sub, 
+                user.id, 
                 EventStatus.UNDER_REVIEW, // Status Awal
                 EventStatus.UNDER_REVIEW, // Status Akhir (Tetap sama)
                 `Disetujui oleh ${pendingApproval.roleSnapshot} (Tahap ${pendingApproval.stepOrder}). Melanjutkan ke pejabat berikutnya.`

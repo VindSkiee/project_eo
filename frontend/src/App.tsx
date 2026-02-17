@@ -5,10 +5,16 @@ import { Toaster } from "@/components/ui/sonner";
 import LoginPage from "@/pages/auth/LoginPage";
 import DashboardLayout from "@/layouts/DashboardLayout";
 import LeaderDashboard from "@/pages/dashboard/RW/LeaderDashboard";
+import EventsPage from "@/pages/dashboard/RW/EventsPage";
+import EventDetailPage from "@/pages/dashboard/RW/EventDetailPage";
+import FinancePage from "@/pages/dashboard/RW/FinancePage";
+import PaymentPage from "@/pages/dashboard/RW/PaymentPage";
 import AdminDashboard from "@/pages/dashboard/RT/AdminDashboard";
 import ResidentDashboard from "@/pages/dashboard/Warga/ResidentDashboard";
 import FinanceDashboard from "@/pages/dashboard/Bendahara/FinanceDashboard";
 import OrganizationPage from "@/pages/dashboard/Shared/OrganizationPage";
+import UserDetailPage from "@/pages/dashboard/Shared/UserDetailPage";
+import ProfilePage from "@/pages/dashboard/Shared/ProfilePage";
 
 // --- 1. UTILITY FUNCTIONS ---
 const isAuthenticated = () => {
@@ -99,6 +105,10 @@ function App() {
                 {/* Hanya LEADER (Ketua RW) yang bisa buka ini */}
                 <Route element={<RoleProtectedRoute allowedRoles={["LEADER"]} />}>
                   <Route path="rw" element={<LeaderDashboard />} />
+                  <Route path="kegiatan" element={<EventsPage />} />
+                  <Route path="events/:id" element={<EventDetailPage />} />
+                  <Route path="kas" element={<FinancePage />} />
+                  <Route path="pembayaran" element={<PaymentPage />} />
                 </Route>
 
                 {/* Hanya ADMIN (Ketua RT) yang bisa buka ini */}
@@ -111,14 +121,23 @@ function App() {
                   <Route path="finance" element={<FinanceDashboard />} />
                 </Route>
 
-                {/* RW, RT, dan Warga boleh buka halaman warga (misal untuk lihat pengumuman) */}
-                <Route element={<RoleProtectedRoute allowedRoles={["RESIDENT"]} />}>
-                  <Route path="warga" element={<ResidentDashboard />} />
+                {/* RW, RT, dan Warga boleh buka halaman organisasi */}
+                <Route element={<RoleProtectedRoute allowedRoles={["LEADER", "RESIDENT"]} />}>
                   <Route path="organisasi" element={<OrganizationPage />} />
                 </Route>
 
+                {/* Detail User — Accessible by LEADER dan ADMIN */}
+                <Route element={<RoleProtectedRoute allowedRoles={["LEADER", "ADMIN"]} />}>
+                  <Route path="users/:id" element={<UserDetailPage />} />
+                </Route>
+
+                {/* Warga dashboard */}
+                <Route element={<RoleProtectedRoute allowedRoles={["RESIDENT"]} />}>
+                  <Route path="warga" element={<ResidentDashboard />} />
+                </Route>
+
                 {/* Profil bisa dibuka oleh SEMUA role yang sudah login */}
-                <Route path="profile" element={<div className="p-4 font-medium text-slate-500">Halaman Profil Segera Hadir</div>} />
+                <Route path="profile" element={<ProfilePage />} />
             </Route>
         </Route>
 

@@ -666,7 +666,7 @@ Injects the current authenticated user's data into the controller.
 ```typescript
 @Get('profile')
 async getProfile(@ActiveUser() user: ActiveUserData) {
-  return this.usersService.findOne(user.sub);
+  return this.usersService.findOne(user.id);
 }
 ```
 

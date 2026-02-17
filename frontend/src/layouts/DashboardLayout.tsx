@@ -8,6 +8,8 @@ import {
   LogOut, 
   Menu,
   Building2,
+  CalendarDays,
+  CreditCard,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -72,8 +74,10 @@ export default function DashboardLayout() {
 
     if (role === "LEADER") {
       menu.push({ title: "Dashboard RW", path: "/dashboard/rw", icon: LayoutDashboard });
-      menu.push({ title: "Kas & Keuangan", path: "/dashboard/finance", icon: Wallet });
-      menu.push({ title: "Manajemen Warga", path: "/dashboard/warga", icon: Users }); // RW bisa lihat data warga umum
+      menu.push({ title: "Organisasi", path: "/dashboard/organisasi", icon: Building2 });
+      menu.push({ title: "Kegiatan", path: "/dashboard/kegiatan", icon: CalendarDays });
+      menu.push({ title: "Kas & Keuangan", path: "/dashboard/kas", icon: Wallet });
+      menu.push({ title: "Pembayaran", path: "/dashboard/pembayaran", icon: CreditCard });
     } 
     else if (role === "ADMIN") {
       menu.push({ title: "Dashboard RT", path: "/dashboard/rt", icon: LayoutDashboard });
@@ -209,11 +213,11 @@ export default function DashboardLayout() {
       {/* --- MAIN CONTENT AREA --- */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         
-        {/* Mobile Menu Button (Fixed) */}
-        <div className="md:hidden fixed top-4 left-4 z-50">
+        {/* Mobile Header with Menu Button */}
+        <header className="md:hidden sticky top-0 z-40 flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-md border-b border-slate-200/60">
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="bg-white/90 backdrop-blur-md shadow-lg text-primary hover:text-primary hover:bg-slate-50">
+              <Button variant="ghost" size="icon" className="shrink-0 text-primary hover:text-primary hover:bg-slate-100">
                 <Menu className="h-6 w-6" />
               </Button>
             </SheetTrigger>
@@ -224,7 +228,17 @@ export default function DashboardLayout() {
               </div>
             </SheetContent>
           </Sheet>
-        </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-base font-semibold font-poppins text-slate-900 truncate">
+              {menuItems.find(item => location.pathname.includes(item.path))?.title || "Dashboard"}
+            </h1>
+          </div>
+          <Avatar className="h-8 w-8 border border-slate-200">
+            <AvatarFallback className="bg-primary/10 text-primary font-bold text-sm font-poppins">
+              {user?.fullName?.charAt(0).toUpperCase() || "U"}
+            </AvatarFallback>
+          </Avatar>
+        </header>
 
         {/* CONTENT OUTLET - Full Screen */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8">

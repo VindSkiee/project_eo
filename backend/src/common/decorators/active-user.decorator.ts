@@ -2,10 +2,22 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { SystemRoleType } from '@prisma/client';
 
 export interface ActiveUserData {
-  sub: string;            // User ID
+  id: string;            // User ID
   email: string;
-  roleType: SystemRoleType; // PENTING: Untuk cek ADMIN/LEADER
+  fullName?: string;
+  roleId?: number;
+  roleType: SystemRoleType; // FLAT: Untuk cek ADMIN/LEADER di services
   communityGroupId: number; // PENTING: Untuk cek dia RT mana
+  
+  // Keep nested structure for backward compatibility with RolesGuard
+  role?: {
+    id: number;
+    type: SystemRoleType;
+  };
+  communityGroup?: {
+    id: number;
+    wallet?: any; // For finance operations
+  };
 }
 
 export const ActiveUser = createParamDecorator(

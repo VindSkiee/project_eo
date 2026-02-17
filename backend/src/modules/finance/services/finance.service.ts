@@ -53,7 +53,7 @@ export class FinanceService {
         amount: dto.amount,
         type: dto.type,
         description: `[MANUAL] ${dto.description}`,
-        createdById: user.sub, // Track siapa bendaharanya
+        createdById: user.id, // Track siapa bendaharanya
       });
     });
   }

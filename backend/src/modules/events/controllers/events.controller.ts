@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   HttpCode,
@@ -58,6 +59,16 @@ export class EventsController {
     @ActiveUser() user: ActiveUserData
   ) {
     return this.eventsService.updateEvent(eventId, updateEventDto, user);
+  }
+
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  async deleteEvent(
+    @Param('id') eventId: string,
+    @ActiveUser() user: ActiveUserData
+  ) {
+    return this.eventsService.deleteEvent(eventId, user);
   }
 
   @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)

@@ -145,6 +145,34 @@ export class EventsRepository {
   }
 
   // ==========================================
+  // 4.5 UPDATE EVENT DATA
+  // ==========================================
+  async updateEvent(
+    eventId: string,
+    data: {
+      title?: string;
+      description?: string;
+      budgetEstimated?: number;
+      startDate?: Date;
+      endDate?: Date;
+    },
+  ) {
+    return this.prisma.event.update({
+      where: { id: eventId },
+      data,
+    });
+  }
+
+  // ==========================================
+  // 4.6 DELETE EVENT
+  // ==========================================
+  async deleteEvent(eventId: string) {
+    return this.prisma.event.delete({
+      where: { id: eventId },
+    });
+  }
+
+  // ==========================================
   // 5. ADD MORE PARTICIPANTS (Susulan)
   // ==========================================
   async addParticipants(eventId: string, userIds: string[], role: EventParticipantRole) {
