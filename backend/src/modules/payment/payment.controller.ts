@@ -5,7 +5,8 @@ import {
   Body, 
   Param, 
   HttpCode, 
-  HttpStatus, 
+  HttpStatus,
+  Query, 
 } from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { SystemRoleType } from '@prisma/client';
@@ -17,6 +18,7 @@ import type { ActiveUserData } from '@common/decorators/active-user.decorator';
 
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { RequestRefundDto } from './dto/request-refund.dto';
+import { SkipThrottle, Throttle } from '@nestjs/throttler/dist/throttler.decorator';
 
 @Controller('payment')
 export class PaymentController {
@@ -37,9 +39,15 @@ export class PaymentController {
     return this.paymentService.createTransaction(user.sub, orderId, createTransactionDto.amount);
   }
 
+  // Endpoint: GET /payment/history
+  // Endpoint: GET /payment/history?userId=xxx-yyy-zzz (Khusus Admin)
   @Get('history')
-  async getPaymentHistory(@ActiveUser() user: ActiveUserData) {
-    return this.paymentService.getPaymentHistory(user.sub); 
+  async getPaymentHistory(
+    @ActiveUser() user: ActiveUserData,
+    @Query('userId') targetUserId?: string // Opsional
+  ) {
+    // Kita kirim "User yang Request" (Actor) dan "User yang Mau Dilihat" (Target)
+    return this.paymentService.getPaymentHistory(user, targetUserId); 
   }
 
   @Roles(SystemRoleType.RESIDENT)
@@ -109,12 +117,14 @@ export class PaymentController {
   // ==========================================
 
   @Public() 
+  @SkipThrottle()
   @Post('notification')
   @HttpCode(HttpStatus.OK)
   async handleNotification(@Body() notification: Record<string, any>) {
     return this.paymentService.handleNotification(notification);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('pay-dues')
   @HttpCode(HttpStatus.OK)
   async payDues(@ActiveUser() user: ActiveUserData) {

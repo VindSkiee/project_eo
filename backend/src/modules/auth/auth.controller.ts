@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public, ActiveUser } from '@common/decorators'; // Import Public Decorator
 import type { Response } from 'express'; // <-- Import dari express
+import { Throttle } from '@nestjs/throttler/dist/throttler.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -22,6 +23,7 @@ export class AuthController {
    * Endpoint Publik untuk menukar Email & Password dengan Token
    */
   @Public()
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(

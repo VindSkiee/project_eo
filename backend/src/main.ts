@@ -10,13 +10,17 @@ import rateLimit from 'express-rate-limit'; // <-- IMPORT BARU
 import { json, urlencoded } from 'express'; // <-- IMPORT BARU
 import { randomUUID } from 'crypto'; // <-- IMPORT BARU (Bawaan Node.js)
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor'; // <-- KITA BUAT NANTI
+import { NestExpressApplication } from '@nestjs/platform-express/interfaces/nest-express-application.interface';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // 1. SECURITY (Helmet)
   // Menghapus x-powered-by dan menambah header keamanan lainnya
   app.use(helmet());
+
+  // 👇 AKTIFKAN INI AGAR RATE LIMIT MEMBACA IP ASLI USER, BUKAN IP SERVER
+  app.set('trust proxy', 1);
 
   // 2. CORS
   app.enableCors({

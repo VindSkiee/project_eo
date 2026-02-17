@@ -160,4 +160,55 @@ export class FinanceService {
       });
     });
   }
+
+  // A. Ambil Saldo RT dan RW sekaligus
+  async getTransparencyBalance(user: ActiveUserData) {
+    // 1. Ambil info Group User (RT) dan Parent-nya (RW)
+    const userGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: user.communityGroupId },
+      include: { 
+        wallet: true, // Dompet RT
+        parent: {     // Group RW (Parent)
+          include: { wallet: true } // Dompet RW
+        } 
+      }
+    });
+
+    if (!userGroup) throw new NotFoundException('Data lingkungan tidak ditemukan');
+
+    // 2. Format Data untuk Frontend
+    return {
+      rt: {
+        groupName: userGroup.name,
+        balance: userGroup.wallet ? Number(userGroup.wallet.balance) : 0,
+        lastUpdated: userGroup.wallet?.updatedAt || null
+      },
+      rw: userGroup.parent ? {
+        groupName: userGroup.parent.name,
+        balance: userGroup.parent.wallet ? Number(userGroup.parent.wallet.balance) : 0,
+        lastUpdated: userGroup.parent.wallet?.updatedAt || null
+      } : null // Jika tidak ada RW (misal user tinggal di komplek tanpa RW)
+    };
+  }
+
+  // B. Ambil Riwayat Transaksi (Bisa pilih mau lihat RT atau RW)
+  async getTransparencyHistory(user: ActiveUserData, scope: 'RT' | 'RW') {
+    let targetGroupId = user.communityGroupId; // Default: RT
+
+    // Jika user ingin melihat data RW, kita cari ID RW-nya
+    if (scope === 'RW') {
+      const userGroup = await this.prisma.communityGroup.findUnique({
+        where: { id: user.communityGroupId },
+        select: { parentId: true }
+      });
+      
+      if (!userGroup?.parentId) {
+        throw new BadRequestException('Lingkungan Anda tidak terdaftar dalam RW manapun');
+      }
+      targetGroupId = userGroup.parentId;
+    }
+
+    // Reuse fungsi yang sudah ada (aman & efisien)
+    return this.financeRepo.findTransactions(targetGroupId);
+  }
 }

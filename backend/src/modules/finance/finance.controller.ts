@@ -5,7 +5,7 @@ import {
   Body,
   HttpCode,
   HttpStatus,
-  UseGuards
+  Query
 } from '@nestjs/common';
 import { SystemRoleType } from '@prisma/client';
 
@@ -83,5 +83,27 @@ export class FinanceController {
     // Logic cerdas yang memisahkan jatah RT dan RW
     // Output: { total: 30000, breakdown: [{RT: 15000}, {RW: 15000}] }
     return this.duesService.getMyBill(user);
+  }
+
+  // A. Cek Saldo RT & RW
+  // Endpoint: GET /finance/transparency/balance
+  @Roles(SystemRoleType.RESIDENT, SystemRoleType.ADMIN, SystemRoleType.LEADER, SystemRoleType.TREASURER)
+  @Get('transparency/balance')
+  @HttpCode(HttpStatus.OK)
+  async getPublicBalance(@ActiveUser() user: ActiveUserData) {
+    return this.financeService.getTransparencyBalance(user);
+  }
+
+  // B. Cek Riwayat Transaksi
+  // Endpoint: GET /finance/transparency/history?scope=RT
+  // Endpoint: GET /finance/transparency/history?scope=RW
+  @Roles(SystemRoleType.RESIDENT, SystemRoleType.ADMIN, SystemRoleType.LEADER, SystemRoleType.TREASURER)
+  @Get('transparency/history')
+  @HttpCode(HttpStatus.OK)
+  async getPublicHistory(
+    @ActiveUser() user: ActiveUserData,
+    @Query('scope') scope: 'RT' | 'RW' = 'RT' // Default lihat RT sendiri
+  ) {
+    return this.financeService.getTransparencyHistory(user, scope);
   }
 }

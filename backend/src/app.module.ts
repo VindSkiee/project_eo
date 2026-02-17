@@ -1,6 +1,6 @@
 import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD, APP_INTERCEPTOR, APP_PIPE, APP_FILTER } from '@nestjs/core'; 
+import { APP_GUARD, APP_INTERCEPTOR, APP_PIPE, APP_FILTER } from '@nestjs/core';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -27,6 +27,7 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter'; // Import Filter Anda
 import { RolesGuard } from '@common/guards/roles.guard';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -43,11 +44,35 @@ import { RolesGuard } from '@common/guards/roles.guard';
     EventsModule,
     FinanceModule,
     PaymentModule,
+    ThrottlerModule.forRoot([
+      // 1. Anti-Spam Cepat (Burst Protection)
+      // Izinkan 5 request dalam 1 detik (untuk loading awal dashboard)
+      // Jika lebih dari 5x klik dalam sedetik, langsung blokir.
+      {
+        name: 'short',
+        ttl: 1000,
+        limit: 5,
+      },
+
+      // 2. Mode Hemat CPU (Sustained Usage)
+      // Maksimal 40 request per menit.
+      // Ini setara 1 request tiap 1.5 detik secara rata-rata.
+      // Sudah cukup untuk penggunaan manusia normal, tapi akan memblokir bot/scraper.
+      {
+        name: 'long',
+        ttl: 60000, // 1 menit
+        limit: 40,  // <-- Turunkan dari 100 ke 40
+      },
+    ]),
   ],
   controllers: [AppController],
   providers: [
     AppService,
-    
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+
     // 1. GLOBAL GUARD (Keamanan - Default Secure)
     {
       provide: APP_GUARD,
@@ -55,10 +80,10 @@ import { RolesGuard } from '@common/guards/roles.guard';
     },
 
     {
-    provide: APP_GUARD,
-    useClass: RolesGuard, 
-  },
-    
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+
     // 2. GLOBAL INTERCEPTOR (Format Response Sukses)
     {
       provide: APP_INTERCEPTOR,
@@ -78,8 +103,8 @@ import { RolesGuard } from '@common/guards/roles.guard';
     // 4. GLOBAL EXCEPTION FILTER (Format Error)
     {
       provide: APP_FILTER,
-      useClass: HttpExceptionFilter, 
+      useClass: HttpExceptionFilter,
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

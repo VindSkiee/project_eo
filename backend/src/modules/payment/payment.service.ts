@@ -1,22 +1,25 @@
-import { 
-  Injectable, 
-  InternalServerErrorException, 
-  NotFoundException, 
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
   BadRequestException,
-  ForbiddenException // <--- IMPORT BARU
+  ForbiddenException, // <--- IMPORT BARU
+  Logger
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PaymentRepository } from './payment.repository';
-import { PrismaService } from '../../database/prisma.service'; 
+import { PrismaService } from '../../database/prisma.service';
 import * as midtransClient from 'midtrans-client';
-import { PaymentGatewayStatus, PaymentMethodCategory, SystemRoleType } from '@prisma/client';
+import { PaymentGatewayStatus, PaymentMethodCategory, Prisma, SystemRoleType } from '@prisma/client';
 import { ActiveUserData } from '@common/decorators/active-user.decorator'; // <--- IMPORT BARU
 import { DuesService } from '@modules/finance/services/dues.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class PaymentService {
   private snap: any;
   private coreApi: any;
+  private readonly logger = new Logger(PaymentService.name);
 
   constructor(
     private readonly configService: ConfigService,
@@ -36,8 +39,8 @@ export class PaymentService {
   private checkAccess(paymentUserId: string, user: ActiveUserData) {
     // Definisikan tipe array-nya secara eksplisit
     const pengurusRoles: SystemRoleType[] = [
-      SystemRoleType.ADMIN, 
-      SystemRoleType.TREASURER, 
+      SystemRoleType.ADMIN,
+      SystemRoleType.TREASURER,
       SystemRoleType.LEADER
     ];
 
@@ -143,8 +146,35 @@ export class PaymentService {
   // ==========================================
   // 4. GET HISTORY & DETAILS (Mencegah IDOR)
   // ==========================================
-  async getPaymentHistory(userId: string) {
-    return this.paymentRepo.findByUserId(userId);
+  // ==========================================
+  // GET HISTORY (IDOR PROTECTED 🛡️)
+  // ==========================================
+  async getPaymentHistory(requester: ActiveUserData, targetUserId?: string) {
+    // 1. Tentukan siapa User yang datanya mau diambil (Subject)
+    // Jika targetUserId kosong, berarti dia mau lihat data sendiri.
+    const userIdToQuery = targetUserId || requester.sub;
+
+    // 2. CEK IDOR (Authorization Check)
+    // Jika User yang Request BEDA dengan User yang Datanya Diambil...
+    if (userIdToQuery !== requester.sub) {
+       
+       // ...Maka yang Request WAJIB Admin/Bendahara/Ketua
+       const allowedRoles: SystemRoleType[] = [
+          SystemRoleType.ADMIN, 
+          SystemRoleType.TREASURER, 
+          SystemRoleType.LEADER
+       ];
+
+       if (!allowedRoles.includes(requester.roleType)) {
+          throw new ForbiddenException('Anda tidak memiliki akses untuk melihat riwayat transaksi pengguna lain.');
+       }
+
+       // Opsional: Cek apakah Admin RT 01 mencoba melihat data warga RT 02? (Cross-Group IDOR)
+       // (Memerlukan query ke DB untuk cek group userIdToQuery, bisa ditambahkan jika perlu)
+    }
+
+    // 3. Ambil Data
+    return this.paymentRepo.findByUserId(userIdToQuery);
   }
 
   async getPaymentDetails(paymentId: string, user: ActiveUserData) {
@@ -157,22 +187,23 @@ export class PaymentService {
     return payment;
   }
 
-  // 👇 METHOD BARU: Untuk Admin/Bendahara melihat semua transaksi
-  async getAllTransactions() {
-    return this.paymentRepo.findAll();
+  // 👇 UPDATE METHOD INI
+  // Izinkan menerima parameter "params" dengan tipe dari Prisma
+  async getAllTransactions(params?: Prisma.PaymentGatewayTxFindManyArgs) {
+    return this.prisma.paymentGatewayTx.findMany(params);
   }
 
   // ==========================================
   // 5. REFUND LOGIC
   // ==========================================
   async requestRefund(paymentId: string, amount: number, reason: string, userId: string) {
-     const payment = await this.paymentRepo.findById(paymentId);
-     if (!payment) throw new NotFoundException('Transaksi tidak ditemukan');
-     
-     // Pastikan hanya pemilik yang bisa request refund
-     if (payment.userId !== userId) {
-         throw new ForbiddenException('Anda tidak berhak mengajukan refund untuk transaksi ini');
-     }
+    const payment = await this.paymentRepo.findById(paymentId);
+    if (!payment) throw new NotFoundException('Transaksi tidak ditemukan');
+
+    // Pastikan hanya pemilik yang bisa request refund
+    if (payment.userId !== userId) {
+      throw new ForbiddenException('Anda tidak berhak mengajukan refund untuk transaksi ini');
+    }
 
     return { message: 'Request refund diajukan', paymentId, amount, reason, requestedBy: userId };
   }
@@ -182,121 +213,202 @@ export class PaymentService {
   }
 
   // ==========================================
-  // 6. WEBHOOK HANDLER (CRUCIAL!)
+  // 6. WEBHOOK HANDLER (PRODUCTION READY 🛡️)
   // ==========================================
-  // Gunakan Record<string, any> sebagai pengganti 'any' agar lebih type-safe
-  async handleNotification(notificationBody: Record<string, any>) {
-    try {
-      const statusResponse = await this.coreApi.transaction.notification(notificationBody);
+  async handleNotification(notificationBody: any) {
+    // ---------------------------------------------------------
+    // STEP 1: VALIDASI INPUT & SECURITY CHECK (Di luar Transaksi)
+    // ---------------------------------------------------------
+    if (!notificationBody || typeof notificationBody !== 'object') {
+      throw new BadRequestException('Invalid webhook payload');
+    }
 
-      const orderId = statusResponse.order_id;
-      const transactionStatus = statusResponse.transaction_status;
-      const fraudStatus = statusResponse.fraud_status;
-      const paymentType = statusResponse.payment_type;
+    const serverKey = this.configService.get<string>('midtrans.serverKey');
+    if (!serverKey) throw new InternalServerErrorException('Midtrans Server Key is missing');
 
-      let finalStatus: PaymentGatewayStatus = PaymentGatewayStatus.PENDING;
+    const { order_id, status_code, gross_amount, signature_key } = notificationBody;
 
-      if (transactionStatus === 'capture') {
-        finalStatus = fraudStatus === 'challenge' ? PaymentGatewayStatus.PENDING : PaymentGatewayStatus.PAID;
-      } else if (transactionStatus === 'settlement') {
-        finalStatus = PaymentGatewayStatus.PAID;
-      } else if (transactionStatus === 'cancel') {
-        finalStatus = PaymentGatewayStatus.CANCELLED;
-      } else if (transactionStatus === 'deny' || transactionStatus === 'failure') {
-        finalStatus = PaymentGatewayStatus.FAILED;
-      } else if (transactionStatus === 'expire') {
-        finalStatus = PaymentGatewayStatus.EXPIRED;
-      }
+    if (!signature_key || !order_id || !status_code || !gross_amount) {
+      throw new ForbiddenException('Incomplete webhook payload');
+    }
 
-      let category: PaymentMethodCategory = PaymentMethodCategory.VIRTUAL_ACCOUNT;
+    // ✅ NORMALISASI: Pastikan format gross_amount konsisten
+    // Midtrans mengirim dalam format "XXXXX.00"
+    const normalizedAmount = parseFloat(gross_amount).toFixed(2);
 
-      if (paymentType === 'gopay' || paymentType === 'shopeepay' || paymentType === 'qris') {
-        category = PaymentMethodCategory.E_WALLET;
-        if (paymentType === 'qris') category = PaymentMethodCategory.QRIS;
-      } else if (paymentType === 'credit_card') {
-        category = PaymentMethodCategory.CREDIT_CARD;
-      } else if (paymentType === 'cstore') {
-        category = PaymentMethodCategory.CONVENIENCE_STORE;
-      }
+    const payloadString = order_id + status_code + normalizedAmount + serverKey;
 
-      let providerCode = paymentType;
-      let vaNumber = undefined;
+    const expectedSignature = crypto
+      .createHash('sha512')
+      .update(payloadString)
+      .digest('hex');
 
-      if (statusResponse.va_numbers && statusResponse.va_numbers.length > 0) {
-        providerCode = statusResponse.va_numbers[0].bank;
-        vaNumber = statusResponse.va_numbers[0].va_number;
-      } else if (statusResponse.bca_va_number) {
-        providerCode = 'bca';
-        vaNumber = statusResponse.bca_va_number;
-      }
+    // 1.B. Timing-Safe Comparison (Mencegah Timing Attack)
+    const signatureBuffer = Buffer.from(signature_key);
+    const expectedBuffer = Buffer.from(expectedSignature);
 
-      await this.paymentRepo.updateFromMidtransWebhook(orderId, {
-        status: finalStatus,
-        midtransId: statusResponse.transaction_id,
-        methodCategory: category,
-        providerCode: providerCode,
-        vaNumber: vaNumber,
-        rawResponse: statusResponse,
-        paidAt: finalStatus === PaymentGatewayStatus.PAID ? new Date(statusResponse.settlement_time || Date.now()) : undefined,
+    if (signatureBuffer.length !== expectedBuffer.length ||
+      !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {
+      console.error(`⛔ [SECURITY ALERT] Fake Webhook detected for Order ${order_id}`);
+      throw new ForbiddenException('Invalid Signature Key');
+    }
+
+    // ---------------------------------------------------------
+    // STEP 2: PERSIAPAN DATA
+    // ---------------------------------------------------------
+    const transactionStatus = notificationBody.transaction_status;
+    const fraudStatus = notificationBody.fraud_status;
+    const paymentType = notificationBody.payment_type;
+
+    let finalStatus: PaymentGatewayStatus = PaymentGatewayStatus.PENDING;
+
+    // Mapping Status Midtrans ke Enum Kita
+    if (transactionStatus === 'capture') {
+      finalStatus = fraudStatus === 'challenge' ? PaymentGatewayStatus.PENDING : PaymentGatewayStatus.PAID;
+    } else if (transactionStatus === 'settlement') {
+      finalStatus = PaymentGatewayStatus.PAID;
+    } else if (transactionStatus === 'cancel') {
+      finalStatus = PaymentGatewayStatus.CANCELLED;
+    } else if (transactionStatus === 'deny' || transactionStatus === 'failure') {
+      finalStatus = PaymentGatewayStatus.FAILED;
+    } else if (transactionStatus === 'expire') {
+      finalStatus = PaymentGatewayStatus.EXPIRED;
+    } else if (transactionStatus === 'pending') {
+      finalStatus = PaymentGatewayStatus.PENDING;
+    }
+
+    // Mapping Kategori Pembayaran
+    let category: PaymentMethodCategory = PaymentMethodCategory.VIRTUAL_ACCOUNT;
+    if (['gopay', 'shopeepay', 'qris'].includes(paymentType)) category = PaymentMethodCategory.E_WALLET;
+    else if (paymentType === 'credit_card') category = PaymentMethodCategory.CREDIT_CARD;
+    else if (paymentType === 'cstore') category = PaymentMethodCategory.CONVENIENCE_STORE;
+
+    let providerCode = paymentType;
+    let vaNumber = undefined;
+
+    // Ambil info VA jika ada
+    if (notificationBody.va_numbers?.[0]) {
+      providerCode = notificationBody.va_numbers[0].bank;
+      vaNumber = notificationBody.va_numbers[0].va_number;
+    } else if (notificationBody.bca_va_number) {
+      providerCode = 'bca';
+      vaNumber = notificationBody.bca_va_number;
+    }
+
+    // ---------------------------------------------------------
+    // STEP 3: DATABASE TRANSACTION (ATOMIC OPERATION)
+    // ---------------------------------------------------------
+    // Kita membungkus Cek Status, Update Status, dan Distribusi Uang dalam 1 Transaksi.
+    // IsolationLevel.Serializable = Level tertinggi, memastikan data dikunci (Lock) saat diproses.
+
+    return await this.prisma.$transaction(async (tx) => {
+      // 3.A. Cari Transaksi di Database
+      // Menggunakan tx (Transaction Client) bukan this.prisma
+      const existingTransaction = await tx.paymentGatewayTx.findUnique({
+        where: { orderId: order_id },
       });
 
-      console.log(`✅ Webhook Processed: Order ${orderId} is now ${finalStatus}`);
-      return { status: 'ok', message: 'Webhook successfully processed' };
+      if (!existingTransaction) {
+        console.warn(`⚠️ Transaction ${order_id} not found in DB during webhook.`);
+        return { status: 'ok', message: 'Transaction ignored (Not found)' };
+      }
 
-    } catch (error) {
-      console.error('Webhook Verification Error:', error);
-      throw new BadRequestException('Invalid notification data');
-    }
+      // 3.B. Idempotency Check (Pencegahan Double Process)
+      // Jika status di DB sudah PAID, abaikan request ini.
+      if (existingTransaction.status === PaymentGatewayStatus.PAID) {
+        console.log(`ℹ️ Order ${order_id} is already PAID. Ignoring duplicate webhook.`);
+        return { status: 'ok', message: 'Already processed' };
+      }
+
+      // 3.C. Update Payment Status
+      const updatedPayment = await tx.paymentGatewayTx.update({
+        where: { orderId: order_id },
+        data: {
+          status: finalStatus,
+          midtransId: notificationBody.transaction_id,
+          methodCategory: category,
+          providerCode: providerCode,
+          vaNumber: vaNumber,
+          rawResponse: notificationBody, // Simpan mentahan JSON buat debug
+          paidAt: finalStatus === PaymentGatewayStatus.PAID ? new Date() : null,
+        },
+      });
+
+      // 3.D. Trigger Distribusi Uang (Hanya jika status berubah jadi PAID)
+      if (finalStatus === PaymentGatewayStatus.PAID) {
+        console.log(`💰 Payment Success for ${order_id}. Distributing funds atomically...`);
+
+        // PENTING: Kita harus mengoper 'tx' ke service lain
+        // Agar DuesService ikut dalam transaksi yang sama.
+        await this.duesService.distributeContribution(
+          updatedPayment.userId,
+          Number(updatedPayment.amount),
+          tx // 👈 PASS TRANSACTION CLIENT KE SINI
+        );
+      }
+
+      this.logger.log(`✅ Webhook Processed: ${order_id} -> ${finalStatus}`);
+       return { status: 'ok', message: 'Webhook processed' };
+    }, {
+       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+       timeout: 20000,
+    });
   }
 
   // ==========================================
   // CREATE PAYMENT TOKEN (Bayar Iuran)
   // ==========================================
   async createDuesPayment(user: ActiveUserData) {
-    // 1. HITUNG TAGIHAN OTOMATIS
-    // Panggil fungsi yang sudah kita buat kemarin
+    // 1. HITUNG TAGIHAN
     const bill = await this.duesService.getMyBill(user);
 
-    // Validasi: Kalau total 0, ngapain bayar?
     if (bill.totalAmount <= 0) {
       throw new BadRequestException('Tidak ada tagihan iuran yang perlu dibayar saat ini.');
     }
 
-    // 2. BUAT ORDER ID UNIK
-    // Format: DUES-{USER_ID}-{TIMESTAMP} agar tidak duplikat
+    // 2. GENERATE ORDER ID
     const orderId = `DUES-${user.sub}-${Date.now()}`;
 
-    // 3. SIAPKAN PAYLOAD KE MIDTRANS
-    // Di sinilah kita "memaksa" Midtrans memakai harga hitungan kita
+    // 3. 👇 TAMBAHAN PENTING: SIMPAN DRAFT KE DB DULU!
+    // Kita pakai repo yang sama seperti createTransaction
+    await this.paymentRepo.createTransaction({
+      orderId: orderId,
+      userId: user.sub,
+      amount: bill.totalAmount,
+      grossAmount: bill.totalAmount,
+      // Bisa tambah field metadata/description kalau perlu
+    });
+
+    // 4. SIAPKAN PARAMETER MIDTRANS
     const parameter = {
       transaction_details: {
         order_id: orderId,
-        gross_amount: bill.totalAmount, // <--- INI KUNCINYA (30.000)
+        gross_amount: bill.totalAmount,
       },
-      // Fitur Keren: Rincian Item (Warga bisa lihat di email invoice Midtrans)
       item_details: bill.breakdown.map((item) => ({
-        id: `ITEM-${item.type}`,    // misal: ITEM-RT
-        price: item.amount,         // misal: 15000
+        id: `ITEM-${item.type}`,
+        price: item.amount,
         quantity: 1,
-        name: item.groupName,       // misal: "Iuran RT 01"
+        name: item.groupName,
       })),
       customer_details: {
-        first_name: user.email, // Atau nama user
+        first_name: user.email,
         email: user.email,
       },
-      // Custom field untuk menyimpan User ID agar mudah saat Webhook nanti
-      custom_field1: user.sub, 
+      custom_field1: user.sub,
     };
 
-    // 4. MINTA TOKEN KE MIDTRANS
+    // 5. MINTA TOKEN
     try {
       const transaction = await this.snap.createTransaction(parameter);
-      
-      // Kembalikan token dan url redirect ke Frontend
+
+      // 6. 👇 UPDATE TOKEN KE DB (Agar sinkron)
+      await this.paymentRepo.updateSnapData(orderId, transaction.token, transaction.redirect_url);
+
       return {
         token: transaction.token,
         redirect_url: transaction.redirect_url,
-        amount: bill.totalAmount, // Info tambahan buat frontend
+        amount: bill.totalAmount,
         breakdown: bill.breakdown
       };
     } catch (error) {
