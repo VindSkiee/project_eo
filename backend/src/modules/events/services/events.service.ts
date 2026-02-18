@@ -12,24 +12,34 @@ import { UpdateEventDto } from '../dto/update-event.dto';
 import { EventApprovalService } from './event-approval.service';
 import { SubmitExpenseDto } from '../dto/submit-expense.dto';
 import { VerifyExpenseDto } from '../dto/verify-expense.dto';
-// 👇 IMPORT FINANCE SERVICE
 import { FinanceService } from '../../finance/services/finance.service'; 
+import { PrismaService } from '../../../database/prisma.service';
 
 @Injectable()
 export class EventsService {
   constructor(
     private readonly eventsRepo: EventsRepository,
     private readonly eventApprovalService: EventApprovalService,
-    private readonly financeService: FinanceService // 👈 INJECT DI SINI
+    private readonly financeService: FinanceService,
+    private readonly prisma: PrismaService,
   ) { }
 
   // ==========================================
   // FUNGSI PEMBANTU: PENCEGAHAN IDOR LINTAS RT
+  // (Now also allows parent group events for child group users)
   // ==========================================
-  private checkGroupAccess(eventCommunityGroupId: number, user: ActiveUserData) {
-    if (eventCommunityGroupId !== user.communityGroupId) {
-      throw new ForbiddenException('Anda tidak memiliki akses ke data acara di lingkungan ini');
-    }
+  private async checkGroupAccess(eventCommunityGroupId: number, user: ActiveUserData) {
+    if (eventCommunityGroupId === user.communityGroupId) return;
+
+    // Allow access if the event belongs to the user's parent group
+    const userGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: user.communityGroupId },
+      select: { parentId: true },
+    });
+
+    if (userGroup?.parentId && eventCommunityGroupId === userGroup.parentId) return;
+
+    throw new ForbiddenException('Anda tidak memiliki akses ke data acara di lingkungan ini');
   }
 
   // ==========================================
@@ -61,10 +71,22 @@ export class EventsService {
   }
 
   // ==========================================
-  // 2. GET ALL EVENTS
+  // 2. GET ALL EVENTS (Including parent group events)
   // ==========================================
   async findAllEvents(user: ActiveUserData) {
-    const events = await this.eventsRepo.findAll(user.communityGroupId);
+    const groupIds = [user.communityGroupId];
+
+    // If user is in a child group (RT), also show events from parent (RW)
+    const group = await this.prisma.communityGroup.findUnique({
+      where: { id: user.communityGroupId },
+      select: { parentId: true },
+    });
+
+    if (group?.parentId) {
+      groupIds.push(group.parentId);
+    }
+
+    const events = await this.eventsRepo.findAll(groupIds);
 
     if (user.roleType === SystemRoleType.RESIDENT) {
       return events.filter(event => event.status !== EventStatus.DRAFT);

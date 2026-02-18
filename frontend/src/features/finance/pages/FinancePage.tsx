@@ -36,8 +36,9 @@ import type {
   WalletDetail,
   Transaction,
   FundRequest,
+  ChildWalletInfo,
 } from "@/shared/types";
-import { TransactionTable, FundRequestTable } from "@/features/finance/components";
+import { TransactionTable, FundRequestTable, ChildrenWalletsSection } from "@/features/finance/components";
 
 // === HELPERS ===
 
@@ -63,9 +64,22 @@ export default function FinancePage() {
   const [wallet, setWallet] = useState<WalletDetail | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [fundRequests, setFundRequests] = useState<FundRequest[]>([]);
+  const [childrenWallets, setChildrenWallets] = useState<ChildWalletInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingChildren, setLoadingChildren] = useState(false);
   const [searchTx, setSearchTx] = useState("");
   const [searchFR, setSearchFR] = useState("");
+
+  // Check role from localStorage
+  const userRole = (() => {
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) return JSON.parse(stored).role;
+    } catch { /* ignore */ }
+    return null;
+  })();
+
+  const showChildrenWallets = userRole === "LEADER" || userRole === "ADMIN";
 
   // Reject Dialog
   const [selectedFR, setSelectedFR] = useState<FundRequest | null>(null);
@@ -75,6 +89,7 @@ export default function FinancePage() {
 
   useEffect(() => {
     fetchData();
+    if (showChildrenWallets) fetchChildrenWallets();
   }, []);
 
   const fetchData = async () => {
@@ -96,6 +111,18 @@ export default function FinancePage() {
       toast.error("Gagal memuat data keuangan.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchChildrenWallets = async () => {
+    setLoadingChildren(true);
+    try {
+      const data = await financeService.getChildrenWallets();
+      setChildrenWallets(data.children);
+    } catch {
+      // Non-critical: children wallets may not be available for all roles
+    } finally {
+      setLoadingChildren(false);
     }
   };
 
@@ -238,6 +265,15 @@ export default function FinancePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Children Wallets — visible for LEADER / ADMIN */}
+      {showChildrenWallets && (
+        <ChildrenWalletsSection
+          wallets={childrenWallets}
+          loading={loadingChildren}
+          basePath="/dashboard/keuangan-rt"
+        />
+      )}
 
       {/* Tabs: Transaksi / Pengajuan Dana */}
       <Tabs defaultValue="transaksi" className="space-y-4">

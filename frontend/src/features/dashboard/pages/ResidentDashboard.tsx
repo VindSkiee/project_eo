@@ -1,30 +1,65 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "@/shared/ui/card";
+import { Badge } from "@/shared/ui/badge";
 import { Skeleton } from "@/shared/ui/skeleton";
-import { Users, ArrowRight } from "lucide-react";
+import { Button } from "@/shared/ui/button";
+import {
+  Wallet,
+  CreditCard,
+  ArrowRight,
+  CalendarDays,
+  AlertCircle,
+  CheckCircle2,
+  Megaphone,
+  PartyPopper,
+} from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
 import { eventService } from "@/features/event/services/eventService";
-import { groupService } from "@/features/organization/services/groupService";
-import type { TransparencyBalance, MyBill, EventItem, GroupItem } from "@/shared/types";
-import {
-  BalanceCards,
-  BillCard,
-  AnnouncementSection,
-} from "@/features/dashboard/components";
+import type { TransparencyBalance, MyBill, EventItem } from "@/shared/types";
+
+function formatRupiah(amount: number): string {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getEventStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    APPROVED: "Disetujui",
+    FUNDED: "Didanai",
+    ONGOING: "Berlangsung",
+    COMPLETED: "Selesai",
+  };
+  return labels[status] || status;
+}
 
 export default function ResidentDashboard() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [balance, setBalance] = useState<TransparencyBalance | null>(null);
   const [bill, setBill] = useState<MyBill | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
-  const [groups, setGroups] = useState<GroupItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
 
   const user = (() => {
     try {
@@ -35,82 +70,277 @@ export default function ResidentDashboard() {
     }
   })();
 
+  // Check for payment success redirect
+  useEffect(() => {
+    if (searchParams.get("payment") === "success") {
+      setShowSuccessPopup(true);
+      setSearchParams({}, { replace: true });
+      const timer = setTimeout(() => setShowSuccessPopup(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, setSearchParams]);
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [balanceData, billData, eventsData, groupsData] = await Promise.allSettled(
-          [
-            financeService.getTransparencyBalance(),
-            financeService.getMyBill(),
-            eventService.getAll(),
-            groupService.getAll(),
-          ]
-        );
+        const [balanceData, billData, eventsData] = await Promise.allSettled([
+          financeService.getTransparencyBalance(),
+          financeService.getMyBill(),
+          eventService.getAll(),
+        ]);
 
         if (balanceData.status === "fulfilled") setBalance(balanceData.value);
         if (billData.status === "fulfilled") setBill(billData.value);
         if (eventsData.status === "fulfilled") setEvents(eventsData.value);
-        if (groupsData.status === "fulfilled") setGroups(groupsData.value);
       } catch {
         toast.error("Terjadi kesalahan saat memuat data dashboard.");
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
 
+  const hasUnpaidBill = bill !== null && bill.totalAmount > 0;
+  const approvedEvents = events.filter((e) =>
+    ["APPROVED", "FUNDED", "ONGOING", "COMPLETED"].includes(e.status)
+  );
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Payment Success Popup */}
+      {showSuccessPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
+          <Card className="w-full max-w-sm mx-4 shadow-2xl border-0 overflow-hidden">
+            <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 text-center">
+              <div className="mx-auto w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mb-3">
+                <CheckCircle2 className="h-10 w-10 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-white font-poppins">Pembayaran Berhasil!</h2>
+              <p className="text-emerald-100 text-sm mt-1">
+                Iuran bulanan Anda telah berhasil dibayarkan.
+              </p>
+            </div>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-slate-500">
+                Terima kasih atas kontribusi Anda untuk lingkungan.
+              </p>
+              <Button
+                size="sm"
+                className="mt-3"
+                onClick={() => setShowSuccessPopup(false)}
+              >
+                Tutup
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Header */}
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold font-poppins text-slate-900">
-          Halo, {user?.fullName || "Warga"}!
+          Halo, {user?.fullName || "Warga"}! 👋
         </h1>
         <p className="text-sm sm:text-base text-slate-500 mt-1">
           Selamat datang di portal informasi warga.
         </p>
       </div>
 
-      {/* === ROW 1: Saldo Kas RW & RT === */}
-      <BalanceCards balance={balance} loading={loading} />
+      {/* === TAGIHAN IURAN (Prominent) === */}
+      {loading ? (
+        <Skeleton className="h-40 w-full rounded-xl" />
+      ) : hasUnpaidBill ? (
+        <Card className="border-red-200 bg-gradient-to-br from-red-50 to-orange-50 overflow-hidden">
+          <CardContent className="p-0">
+            <div className="flex flex-col sm:flex-row">
+              <div className="flex-1 p-5 sm:p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-8 w-8 rounded-lg bg-red-100 flex items-center justify-center">
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-red-800 font-poppins">Tagihan Iuran Bulanan</p>
+                    <p className="text-xs text-red-500">{bill?.dueDateDescription}</p>
+                  </div>
+                </div>
+                <div className="text-3xl sm:text-4xl font-bold text-red-700 mb-3 font-poppins">
+                  {formatRupiah(bill?.totalAmount || 0)}
+                </div>
+                {bill?.breakdown && bill.breakdown.length > 0 && (
+                  <div className="space-y-1.5 mb-4">
+                    {bill.breakdown.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-sm">
+                        <span className="text-red-600/80">Iuran {item.type} — {item.groupName}</span>
+                        <span className="font-semibold text-red-700">{formatRupiah(item.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Button
+                  className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200 w-full sm:w-auto"
+                  onClick={() => navigate("/dashboard/pembayaran-warga")}
+                >
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Bayar Sekarang
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50">
+          <CardContent className="py-5 px-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-emerald-800 font-poppins">Iuran Lunas</p>
+                <p className="text-xs text-emerald-600">
+                  Tidak ada tagihan iuran untuk saat ini. Terima kasih!
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* === ROW 2: Tagihan & Organisasi === */}
+      {/* === SALDO KAS === */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-        <BillCard bill={bill} loading={loading} />
+        {/* Saldo RT */}
+        <Card className="group hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600 font-poppins">Saldo Kas RT</CardTitle>
+            <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center">
+              <Wallet className="h-4 w-4 text-blue-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-8 w-40" />
+            ) : balance?.rt ? (
+              <>
+                <div className="text-2xl sm:text-3xl font-bold text-slate-900 font-poppins">
+                  {formatRupiah(balance.rt.balance)}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">{balance.rt.groupName}</p>
+              </>
+            ) : (
+              <p className="text-sm text-slate-400">Data tidak tersedia</p>
+            )}
+          </CardContent>
+        </Card>
 
-        {/* Jumlah Organisasi */}
-        <Link to="/dashboard/organisasi" className="block">
-          <Card className="h-full transition-shadow hover:shadow-md cursor-pointer group">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600 font-poppins">
-                Organisasi
-              </CardTitle>
-              <Users className="h-4 w-4 text-violet-600" />
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <Skeleton className="h-8 w-16" />
-              ) : (
-                <>
-                  <div className="text-xl sm:text-2xl font-bold text-slate-900">
-                    {groups.length}
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-primary mt-1 group-hover:underline">
-                    <span>Lihat semua organisasi</span>
-                    <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-                  </div>
-                </>
-              )}
+        {/* Saldo RW */}
+        <Card className="group hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600 font-poppins">Saldo Kas RW</CardTitle>
+            <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+              <Wallet className="h-4 w-4 text-emerald-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-8 w-40" />
+            ) : balance?.rw ? (
+              <>
+                <div className="text-2xl sm:text-3xl font-bold text-slate-900 font-poppins">
+                  {formatRupiah(balance.rw.balance)}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">{balance.rw.groupName}</p>
+              </>
+            ) : (
+              <p className="text-sm text-slate-400">Data tidak tersedia</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* === QUICK ACTIONS === */}
+      <div className="grid gap-3 grid-cols-2">
+        <Link to="/dashboard/pembayaran-warga" className="block">
+          <Card className="h-full hover:shadow-md transition-all cursor-pointer group border-transparent hover:border-primary/20">
+            <CardContent className="flex flex-col items-center justify-center py-5 text-center">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center mb-2 group-hover:bg-primary/20 transition-colors">
+                <CreditCard className="h-5 w-5 text-primary" />
+              </div>
+              <p className="text-xs sm:text-sm font-medium text-slate-700">Pembayaran</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/dashboard/organisasi-warga" className="block">
+          <Card className="h-full hover:shadow-md transition-all cursor-pointer group border-transparent hover:border-primary/20">
+            <CardContent className="flex flex-col items-center justify-center py-5 text-center">
+              <div className="h-10 w-10 rounded-xl bg-violet-50 flex items-center justify-center mb-2 group-hover:bg-violet-100 transition-colors">
+                <PartyPopper className="h-5 w-5 text-violet-600" />
+              </div>
+              <p className="text-xs sm:text-sm font-medium text-slate-700">Organisasi</p>
             </CardContent>
           </Card>
         </Link>
       </div>
 
-      {/* === ANNOUNCEMENT / EVENT SECTION === */}
-      <AnnouncementSection events={events} loading={loading} />
+      {/* === KEGIATAN YANG DISETUJUI === */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Megaphone className="h-5 w-5 text-amber-500" />
+          <h2 className="text-lg sm:text-xl font-semibold font-poppins text-slate-900">
+            Kegiatan Mendatang
+          </h2>
+        </div>
+
+        {loading ? (
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <Card key={i}>
+                <CardHeader><Skeleton className="h-5 w-3/4" /><Skeleton className="h-4 w-1/2 mt-1" /></CardHeader>
+                <CardContent><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-2/3 mt-2" /></CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : approvedEvents.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-10 text-center">
+              <CalendarDays className="h-10 w-10 text-slate-300 mb-3" />
+              <p className="text-sm text-slate-500 font-medium">Belum ada kegiatan mendatang.</p>
+              <p className="text-xs text-slate-400 mt-1">Kegiatan yang disetujui akan tampil di sini.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            {approvedEvents.slice(0, 6).map((event) => (
+              <Link key={event.id} to={`/dashboard/events-warga/${event.id}`} className="block">
+                <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 cursor-pointer group">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="text-sm sm:text-base font-semibold text-slate-900 line-clamp-2 group-hover:text-primary transition-colors">
+                        {event.title}
+                      </CardTitle>
+                      <Badge variant="default" className="shrink-0 text-[10px] sm:text-xs">
+                        {getEventStatusLabel(event.status)}
+                      </Badge>
+                    </div>
+                    {event.startDate && (
+                      <CardDescription className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+                        <CalendarDays className="h-3 w-3" />
+                        {formatDate(event.startDate)}
+                      </CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs sm:text-sm text-slate-600 line-clamp-2">
+                      {event.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

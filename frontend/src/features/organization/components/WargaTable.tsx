@@ -12,10 +12,22 @@ const roleLabel = (role: string) => {
   }
 };
 
+function sortMembers(members: UserItem[], currentUserId?: string): UserItem[] {
+  const getPriority = (u: UserItem): number => {
+    if (currentUserId && u.id === currentUserId) return 0;
+    const r = u.roleType || u.role?.type || "RESIDENT";
+    if (r === "LEADER" || r === "ADMIN") return 1;
+    if (r === "TREASURER") return 2;
+    return 3;
+  };
+  return [...members].sort((a, b) => getPriority(a) - getPriority(b));
+}
+
 interface WargaTableProps {
   users: UserItem[];
   loading: boolean;
   searchQuery: string;
+  currentUserId?: string;
   onUserClick: (userId: string) => void;
   onEdit: (user: UserItem) => void;
   onDelete: (userId: string, userName: string) => void;
@@ -25,6 +37,7 @@ export function WargaTable({
   users,
   loading,
   searchQuery,
+  currentUserId,
   onUserClick,
   onEdit,
   onDelete,
@@ -85,11 +98,13 @@ export function WargaTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {users.map((user, idx) => (
+            {sortMembers(users, currentUserId).map((user, idx) => {
+              const isSelf = !!(currentUserId && user.id === currentUserId);
+              return (
               <tr
                 key={user.id}
                 onClick={() => onUserClick(user.id)}
-                className="group hover:bg-slate-50/80 transition-all duration-200 cursor-pointer"
+                className={`group hover:bg-slate-50/80 transition-all duration-200 cursor-pointer ${isSelf ? "bg-primary/5" : ""}`}
               >
                 <td className="px-6 py-4 whitespace-nowrap text-center">
                   <span className="text-sm text-slate-400 font-mono">
@@ -98,14 +113,15 @@ export function WargaTable({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-left">
                   <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                      <span className="text-xs font-medium text-slate-600">
+                    <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${isSelf ? "bg-gradient-to-br from-primary/20 to-primary/30" : "bg-gradient-to-br from-slate-100 to-slate-200"}`}>
+                      <span className={`text-xs font-medium ${isSelf ? "text-primary" : "text-slate-600"}`}>
                         {user.fullName?.charAt(0).toUpperCase()}
                       </span>
                     </div>
                     <div>
-                      <p className="font-medium text-slate-700 group-hover:text-slate-900 transition-colors">
+                      <p className={`transition-colors ${isSelf ? "font-bold text-primary" : "font-medium text-slate-700 group-hover:text-slate-900"}`}>
                         {user.fullName}
+                        {isSelf && <span className="ml-1.5 text-[10px] font-medium text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded-full">saya</span>}
                       </p>
                       <p className="text-xs text-slate-400 sm:hidden mt-0.5">{user.email}</p>
                     </div>
@@ -173,7 +189,8 @@ export function WargaTable({
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

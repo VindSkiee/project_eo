@@ -40,6 +40,15 @@ export class GroupsController {
   }
 
   /**
+   * GET HIERARCHY WITH OFFICERS
+   * Security: Semua User Login
+   */
+  @Get('hierarchy')
+  getHierarchy(@ActiveUser() user: ActiveUserData) {
+    return this.groupsService.getHierarchy(user);
+  }
+
+  /**
    * FIND ALL
    * Security: Semua User Login (Authenticated)
    */

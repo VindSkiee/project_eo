@@ -3,6 +3,8 @@ import {
   Get,
   Post,
   Body,
+  Param,
+  ParseIntPipe,
   HttpCode,
   HttpStatus,
   Query
@@ -93,8 +95,50 @@ export class FinanceController {
     return this.duesService.getMyBill(user);
   }
 
+  // ==========================================
+  // 4. CHILDREN WALLETS (Saldo semua RT di bawah RW)
+  // ==========================================
+
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)
+  @Get('children-wallets')
+  @HttpCode(HttpStatus.OK)
+  async getChildrenWallets(@ActiveUser() user: ActiveUserData) {
+    return this.financeService.getChildrenWallets(user);
+  }
+
+  // ==========================================
+  // 5. GROUP FINANCE DETAIL
+  // ==========================================
+
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)
+  @Get('groups/:groupId/detail')
+  @HttpCode(HttpStatus.OK)
+  async getGroupFinanceDetail(
+    @Param('groupId', ParseIntPipe) groupId: number,
+    @ActiveUser() user: ActiveUserData,
+  ) {
+    return this.financeService.getGroupFinanceDetail(groupId, user);
+  }
+
+  // ==========================================
+  // 6. TRANSACTION DETAIL
+  // ==========================================
+
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)
+  @Get('transactions/:id')
+  @HttpCode(HttpStatus.OK)
+  async getTransactionDetail(
+    @Param('id') id: string,
+    @ActiveUser() user: ActiveUserData,
+  ) {
+    return this.financeService.getTransactionDetail(id, user);
+  }
+
+  // ==========================================
+  // 7. TRANSPARANSI (Publik untuk Warga)
+  // ==========================================
+
   // A. Cek Saldo RT & RW
-  // Endpoint: GET /finance/transparency/balance
   @Roles(SystemRoleType.RESIDENT, SystemRoleType.ADMIN, SystemRoleType.LEADER, SystemRoleType.TREASURER)
   @Get('transparency/balance')
   @HttpCode(HttpStatus.OK)
@@ -103,14 +147,12 @@ export class FinanceController {
   }
 
   // B. Cek Riwayat Transaksi
-  // Endpoint: GET /finance/transparency/history?scope=RT
-  // Endpoint: GET /finance/transparency/history?scope=RW
   @Roles(SystemRoleType.RESIDENT, SystemRoleType.ADMIN, SystemRoleType.LEADER, SystemRoleType.TREASURER)
   @Get('transparency/history')
   @HttpCode(HttpStatus.OK)
   async getPublicHistory(
     @ActiveUser() user: ActiveUserData,
-    @Query('scope') scope: 'RT' | 'RW' = 'RT' // Default lihat RT sendiri
+    @Query('scope') scope: 'RT' | 'RW' = 'RT',
   ) {
     return this.financeService.getTransparencyHistory(user, scope);
   }

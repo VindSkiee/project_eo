@@ -108,3 +108,89 @@ export interface DuesConfig {
   duesRule: DuesRule | null;
   children: GroupDuesInfo[];
 }
+
+// === Children Wallets (RW → RT) ===
+
+export interface OfficerInfo {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
+export interface ChildWalletInfo {
+  group: { id: number; name: string; type: string };
+  balance: number;
+  memberCount: number;
+  admin: OfficerInfo | null;
+  treasurer: OfficerInfo | null;
+  duesRule: DuesRule | null;
+  walletUpdatedAt: string | null;
+}
+
+export interface ChildrenWalletsData {
+  rw: { id: number; name: string; balance: number };
+  children: ChildWalletInfo[];
+}
+
+// === Group Finance Detail ===
+
+export interface GroupFinanceDetail {
+  group: { id: number; name: string; type: string; parentName?: string };
+  admin: OfficerInfo | null;
+  treasurer: OfficerInfo | null;
+  wallet: { id: number; balance: number; updatedAt: string } | null;
+  duesRule: DuesRule | null;
+  transactions: Transaction[];
+}
+
+// === Transaction Detail ===
+
+export interface TransactionDetail {
+  id: number;
+  amount: number;
+  type: string;
+  description: string;
+  createdAt: string;
+  wallet: {
+    id: number;
+    communityGroup: { id: number; name: string; type: string };
+  };
+  createdBy: { id: string; fullName: string; email: string } | null;
+  event: { id: string; title: string } | null;
+  contribution: {
+    id: string;
+    month: number;
+    year: number;
+    user: { id: string; fullName: string; email: string };
+  } | null;
+}
+
+// === Hierarchy Data (for Organization) ===
+
+export interface HierarchyOfficer {
+  id: string;
+  fullName: string;
+  email: string;
+  phone?: string | null;
+}
+
+export interface HierarchyRtGroup {
+  id: number;
+  name: string;
+  type: string;
+  memberCount: number;
+  admin: HierarchyOfficer | null;
+  treasurer: HierarchyOfficer | null;
+}
+
+export interface HierarchyData {
+  rw: {
+    id: number;
+    name: string;
+    type: string;
+    memberCount: number;
+    leader: HierarchyOfficer | null;
+    treasurer: HierarchyOfficer | null;
+  };
+  rtGroups: HierarchyRtGroup[];
+}

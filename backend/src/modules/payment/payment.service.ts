@@ -359,6 +359,33 @@ export class PaymentService {
   // CREATE PAYMENT TOKEN (Bayar Iuran)
   // ==========================================
   async createDuesPayment(user: ActiveUserData) {
+    // 0. CEK DUPLIKAT: Jangan buat transaksi baru jika masih ada PENDING
+    const existingPending = await this.prisma.paymentGatewayTx.findFirst({
+      where: {
+        userId: user.id,
+        status: 'PENDING',
+        orderId: { startsWith: 'DUES-' },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingPending) {
+      // Jika ada transaksi PENDING yang masih punya token, kembalikan token yang sama
+      if (existingPending.snapToken && existingPending.redirectUrl) {
+        return {
+          token: existingPending.snapToken,
+          redirect_url: existingPending.redirectUrl,
+          amount: Number(existingPending.amount),
+          breakdown: [], // Breakdown tidak disimpan, tapi client sudah punya dari getMyBill
+        };
+      }
+      // Jika PENDING tanpa token (edge case), batalkan dulu sebelum buat baru
+      await this.prisma.paymentGatewayTx.update({
+        where: { id: existingPending.id },
+        data: { status: 'CANCELLED' },
+      });
+    }
+
     // 1. HITUNG TAGIHAN
     const bill = await this.duesService.getMyBill(user);
 

@@ -1,6 +1,6 @@
 // Finance and wallet-related API operations
 import { api } from "@/shared/lib/axios";
-import type { ApiResponse, TransparencyBalance, MyBill, WalletDetail, Transaction, DuesConfig, DuesRule } from "@/shared/types";
+import type { ApiResponse, TransparencyBalance, MyBill, WalletDetail, Transaction, DuesConfig, DuesRule, ChildrenWalletsData, GroupFinanceDetail, TransactionDetail } from "@/shared/types";
 
 export const financeService = {
   /** Get RT & RW wallet balance (transparency endpoint) */
@@ -54,6 +54,24 @@ export const financeService = {
   /** Set dues amount and due day for current group */
   setDuesConfig: async (data: { amount: number; dueDay: number }): Promise<DuesRule> => {
     const response = await api.post<ApiResponse<DuesRule>>("/finance/dues/config", data);
+    return response.data.data;
+  },
+
+  /** Get all RT children wallets (for LEADER/ADMIN) */
+  getChildrenWallets: async (): Promise<ChildrenWalletsData> => {
+    const response = await api.get<ApiResponse<ChildrenWalletsData>>("/finance/children-wallets");
+    return response.data.data;
+  },
+
+  /** Get finance detail for a specific group */
+  getGroupFinanceDetail: async (groupId: number): Promise<GroupFinanceDetail> => {
+    const response = await api.get<ApiResponse<GroupFinanceDetail>>(`/finance/groups/${groupId}/detail`);
+    return response.data.data;
+  },
+
+  /** Get single transaction detail */
+  getTransactionDetail: async (id: number): Promise<TransactionDetail> => {
+    const response = await api.get<ApiResponse<TransactionDetail>>(`/finance/transactions/${id}`);
     return response.data.data;
   },
 };

@@ -88,11 +88,14 @@ export default function DashboardLayout() {
     } 
     else if (role === "TREASURER") {
       menu.push({ title: "Dashboard Keuangan", path: "/dashboard/finance", icon: Wallet });
+      menu.push({ title: "Organisasi", path: "/dashboard/organisasi-bendahara", icon: Building2 });
+      menu.push({ title: "Kegiatan", path: "/dashboard/kegiatan-bendahara", icon: CalendarDays });
     } 
     else {
       // Default / RESIDENT
       menu.push({ title: "Beranda Warga", path: "/dashboard/warga", icon: LayoutDashboard });
-      menu.push({ title: "Organisasi", path: "/dashboard/organisasi", icon: Building2 });
+      menu.push({ title: "Organisasi", path: "/dashboard/organisasi-warga", icon: Building2 });
+      menu.push({ title: "Pembayaran", path: "/dashboard/pembayaran-warga", icon: CreditCard });
     }
 
     // Menu global untuk semua role

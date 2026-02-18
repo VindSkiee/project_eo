@@ -151,4 +151,95 @@ export class GroupsService {
 
     return treasurer;
   }
+
+  /**
+   * GET HIERARCHY WITH OFFICERS
+   * Returns the RW + all RT hierarchy with key officers (admin, treasurer) and member counts.
+   */
+  async getHierarchy(user: ActiveUserData) {
+    // Determine the RW group
+    let rwGroupId: number;
+
+    const userGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: user.communityGroupId },
+      select: { type: true, parentId: true },
+    });
+
+    if (!userGroup) throw new NotFoundException('Data lingkungan tidak ditemukan');
+
+    if (userGroup.type === 'RW') {
+      rwGroupId = user.communityGroupId;
+    } else if (userGroup.parentId) {
+      rwGroupId = userGroup.parentId;
+    } else {
+      rwGroupId = user.communityGroupId;
+    }
+
+    const rwGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: rwGroupId },
+      include: {
+        users: {
+          where: {
+            role: { type: { in: [SystemRoleType.LEADER, SystemRoleType.TREASURER] } },
+            isActive: true,
+          },
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            role: { select: { type: true } },
+          },
+        },
+        children: {
+          orderBy: { name: 'asc' },
+          include: {
+            users: {
+              where: {
+                role: { type: { in: [SystemRoleType.ADMIN, SystemRoleType.TREASURER] } },
+                isActive: true,
+              },
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+                phone: true,
+                role: { select: { type: true } },
+              },
+            },
+            _count: { select: { users: true } },
+          },
+        },
+        _count: { select: { users: true } },
+      },
+    });
+
+    if (!rwGroup) throw new NotFoundException('Data RW tidak ditemukan');
+
+    const leader = rwGroup.users.find((u) => u.role.type === 'LEADER');
+    const rwTreasurer = rwGroup.users.find((u) => u.role.type === 'TREASURER');
+
+    return {
+      rw: {
+        id: rwGroup.id,
+        name: rwGroup.name,
+        type: 'RW' as const,
+        memberCount: rwGroup._count.users,
+        leader: leader ? { id: leader.id, fullName: leader.fullName, email: leader.email, phone: leader.phone } : null,
+        treasurer: rwTreasurer ? { id: rwTreasurer.id, fullName: rwTreasurer.fullName, email: rwTreasurer.email, phone: rwTreasurer.phone } : null,
+      },
+      rtGroups: rwGroup.children.map((rt) => {
+        const admin = rt.users.find((u) => u.role.type === 'ADMIN');
+        const rtTreasurer = rt.users.find((u) => u.role.type === 'TREASURER');
+        return {
+          id: rt.id,
+          name: rt.name,
+          type: 'RT' as const,
+          memberCount: rt._count.users,
+          admin: admin ? { id: admin.id, fullName: admin.fullName, email: admin.email, phone: admin.phone } : null,
+          treasurer: rtTreasurer ? { id: rtTreasurer.id, fullName: rtTreasurer.fullName, email: rtTreasurer.email, phone: rtTreasurer.phone } : null,
+        };
+      }),
+    };
+  }
 }

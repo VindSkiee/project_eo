@@ -87,4 +87,93 @@ export class FinanceRepository {
       }
     });
   }
+
+  // ==========================================
+  // 5. CHILDREN WALLETS (Saldo semua RT di bawah RW)
+  // ==========================================
+  async findChildrenWallets(rwGroupId: number) {
+    return this.prisma.communityGroup.findUnique({
+      where: { id: rwGroupId },
+      include: {
+        wallet: true,
+        children: {
+          orderBy: { name: 'asc' },
+          include: {
+            wallet: true,
+            duesRule: true,
+            users: {
+              where: {
+                role: { type: { in: ['ADMIN', 'TREASURER'] } },
+                isActive: true,
+              },
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+                phone: true,
+                role: { select: { type: true } },
+              },
+            },
+            _count: { select: { users: true } },
+          },
+        },
+      },
+    });
+  }
+
+  // ==========================================
+  // 6. GROUP FINANCE DETAIL (Detail keuangan 1 RT)
+  // ==========================================
+  async findGroupFinanceDetail(groupId: number) {
+    return this.prisma.communityGroup.findUnique({
+      where: { id: groupId },
+      include: {
+        wallet: true,
+        duesRule: true,
+        parent: { select: { id: true, name: true, type: true } },
+        users: {
+          where: {
+            role: { type: { in: ['ADMIN', 'TREASURER'] } },
+            isActive: true,
+          },
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            role: { select: { type: true } },
+          },
+        },
+        _count: { select: { users: true } },
+      },
+    });
+  }
+
+  // ==========================================
+  // 7. SINGLE TRANSACTION DETAIL
+  // ==========================================
+  async findTransactionById(id: string) {
+    return this.prisma.transaction.findUnique({
+      where: { id },
+      include: {
+        wallet: {
+          include: {
+            communityGroup: { select: { id: true, name: true, type: true } },
+          },
+        },
+        event: { select: { id: true, title: true, status: true } },
+        createdBy: { select: { id: true, fullName: true, email: true } },
+        contribution: {
+          select: {
+            id: true,
+            month: true,
+            year: true,
+            amount: true,
+            paidAt: true,
+            user: { select: { fullName: true, email: true } },
+          },
+        },
+      },
+    });
+  }
 }

@@ -124,6 +124,7 @@ export class PaymentController {
     return this.paymentService.handleNotification(notification);
   }
 
+  @Roles(SystemRoleType.RESIDENT)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('pay-dues')
   @HttpCode(HttpStatus.OK)

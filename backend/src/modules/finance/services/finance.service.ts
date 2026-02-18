@@ -211,4 +211,170 @@ export class FinanceService {
     // Reuse fungsi yang sudah ada (aman & efisien)
     return this.financeRepo.findTransactions(targetGroupId);
   }
+
+  // ==========================================
+  // 7. CHILDREN WALLETS (Saldo semua RT/anak)
+  // ==========================================
+  async getChildrenWallets(user: ActiveUserData) {
+    // Determine the RW group ID
+    let rwGroupId: number;
+
+    const userGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: user.communityGroupId },
+      select: { type: true, parentId: true },
+    });
+
+    if (!userGroup) throw new NotFoundException('Data lingkungan tidak ditemukan');
+
+    if (userGroup.type === 'RW') {
+      rwGroupId = user.communityGroupId;
+    } else if (userGroup.parentId) {
+      rwGroupId = userGroup.parentId;
+    } else {
+      throw new NotFoundException('Tidak ditemukan hierarki RW');
+    }
+
+    const data = await this.financeRepo.findChildrenWallets(rwGroupId);
+    if (!data) throw new NotFoundException('Data RW tidak ditemukan');
+
+    return {
+      rw: {
+        id: data.id,
+        name: data.name,
+        balance: data.wallet ? Number(data.wallet.balance) : 0,
+      },
+      children: data.children.map((child) => {
+        const admin = child.users.find((u) => u.role.type === 'ADMIN');
+        const treasurer = child.users.find((u) => u.role.type === 'TREASURER');
+        return {
+          group: { id: child.id, name: child.name, type: child.type },
+          balance: child.wallet ? Number(child.wallet.balance) : 0,
+          memberCount: child._count.users,
+          admin: admin ? { id: admin.id, fullName: admin.fullName } : null,
+          treasurer: treasurer ? { id: treasurer.id, fullName: treasurer.fullName } : null,
+          duesRule: child.duesRule
+            ? { amount: Number(child.duesRule.amount), dueDay: child.duesRule.dueDay, isActive: child.duesRule.isActive }
+            : null,
+          walletUpdatedAt: child.wallet?.updatedAt || null,
+        };
+      }),
+    };
+  }
+
+  // ==========================================
+  // 8. GROUP FINANCE DETAIL (Detail keuangan 1 grup)
+  // ==========================================
+  async getGroupFinanceDetail(groupId: number, user: ActiveUserData) {
+    // Security: user must be LEADER of parent, or member of same parent, or member of that group
+    const userGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: user.communityGroupId },
+      select: { type: true, parentId: true },
+    });
+
+    const targetGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: groupId },
+      select: { parentId: true },
+    });
+
+    if (!userGroup || !targetGroup) throw new NotFoundException('Data lingkungan tidak ditemukan');
+
+    // LEADER can see any child group
+    const isLeaderOfParent = userGroup.type === 'RW' && targetGroup.parentId === user.communityGroupId;
+    // ADMIN/TREASURER can see sibling groups (same parent) or own group
+    const isSibling = userGroup.parentId && userGroup.parentId === targetGroup.parentId;
+    const isOwnGroup = user.communityGroupId === groupId;
+
+    if (!isLeaderOfParent && !isSibling && !isOwnGroup) {
+      throw new ForbiddenException('Anda tidak memiliki akses ke data keuangan lingkungan ini');
+    }
+
+    const group = await this.financeRepo.findGroupFinanceDetail(groupId);
+    if (!group) throw new NotFoundException('Data lingkungan tidak ditemukan');
+
+    const transactions = await this.financeRepo.findTransactions(groupId);
+
+    const admin = group.users.find((u) => u.role.type === 'ADMIN');
+    const treasurer = group.users.find((u) => u.role.type === 'TREASURER');
+
+    return {
+      group: {
+        id: group.id,
+        name: group.name,
+        type: group.type,
+        parent: group.parent,
+        memberCount: group._count.users,
+      },
+      admin: admin ? { id: admin.id, fullName: admin.fullName, email: admin.email, phone: admin.phone } : null,
+      treasurer: treasurer ? { id: treasurer.id, fullName: treasurer.fullName, email: treasurer.email, phone: treasurer.phone } : null,
+      wallet: group.wallet
+        ? { id: group.wallet.id, balance: Number(group.wallet.balance), updatedAt: group.wallet.updatedAt }
+        : null,
+      duesRule: group.duesRule
+        ? {
+            id: group.duesRule.id,
+            amount: Number(group.duesRule.amount),
+            dueDay: group.duesRule.dueDay,
+            isActive: group.duesRule.isActive,
+            updatedAt: group.duesRule.updatedAt,
+          }
+        : null,
+      transactions: transactions.map((tx) => ({
+        id: tx.id,
+        amount: Number(tx.amount),
+        type: tx.type,
+        description: tx.description,
+        createdAt: tx.createdAt,
+        createdBy: tx.createdBy?.fullName || null,
+        event: tx.event?.title || null,
+      })),
+    };
+  }
+
+  // ==========================================
+  // 9. TRANSACTION DETAIL (Detail 1 transaksi)
+  // ==========================================
+  async getTransactionDetail(transactionId: string, user: ActiveUserData) {
+    const tx = await this.financeRepo.findTransactionById(transactionId);
+    if (!tx) throw new NotFoundException('Transaksi tidak ditemukan');
+
+    // Security check: user must be in same group hierarchy
+    const txGroupId = tx.wallet.communityGroup.id;
+    const userGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: user.communityGroupId },
+      select: { type: true, parentId: true },
+    });
+
+    if (!userGroup) throw new ForbiddenException('Data pengguna tidak ditemukan');
+
+    const isOwner = user.communityGroupId === txGroupId;
+    const isParent = userGroup.type === 'RW';
+    const isSibling = userGroup.parentId != null;
+
+    // LEADER (RW) can see any child's transactions
+    // ADMIN/TREASURER can see own group transactions
+    if (!isOwner && !isParent) {
+      throw new ForbiddenException('Anda tidak memiliki akses ke transaksi ini');
+    }
+
+    return {
+      id: tx.id,
+      amount: Number(tx.amount),
+      type: tx.type,
+      description: tx.description,
+      createdAt: tx.createdAt,
+      group: tx.wallet.communityGroup,
+      createdBy: tx.createdBy,
+      event: tx.event,
+      contribution: tx.contribution
+        ? {
+            id: tx.contribution.id,
+            month: tx.contribution.month,
+            year: tx.contribution.year,
+            amount: Number(tx.contribution.amount),
+            paidAt: tx.contribution.paidAt,
+            user: tx.contribution.user,
+          }
+        : null,
+    };
+  }
 }

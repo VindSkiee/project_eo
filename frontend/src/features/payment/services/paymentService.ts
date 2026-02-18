@@ -1,6 +1,6 @@
 // Payment-related API operations
 import { api } from "@/shared/lib/axios";
-import type { ApiResponse, PaymentItem } from "@/shared/types";
+import type { ApiResponse, PaymentItem, DuesPaymentResponse } from "@/shared/types";
 
 export const paymentService = {
   /** Get all payment transactions (LEADER/ADMIN/TREASURER) */
@@ -15,7 +15,30 @@ export const paymentService = {
     return response.data.data;
   },
 
-  /** Process refund */
+  /** Pay monthly dues (creates Midtrans Snap transaction) */
+  payDues: async (): Promise<DuesPaymentResponse> => {
+    const response = await api.post<ApiResponse<DuesPaymentResponse>>("/payment/pay-dues");
+    return response.data.data;
+  },
+
+  /** Get payment details by paymentId */
+  getPaymentDetails: async (paymentId: string): Promise<PaymentItem> => {
+    const response = await api.get<ApiResponse<PaymentItem>>(`/payment/details/${paymentId}`);
+    return response.data.data;
+  },
+
+  /** Get payment status by orderId */
+  getPaymentStatus: async (orderId: string): Promise<{ dbStatus: PaymentItem; midtransStatus: unknown }> => {
+    const response = await api.get<ApiResponse<{ dbStatus: PaymentItem; midtransStatus: unknown }>>(`/payment/status/${orderId}`);
+    return response.data.data;
+  },
+
+  /** Cancel a pending payment */
+  cancelPayment: async (orderId: string): Promise<void> => {
+    await api.post(`/payment/cancel/${orderId}`);
+  },
+
+  /** Process refund (ADMIN/TREASURER/LEADER) */
   processRefund: async (refundId: string): Promise<void> => {
     await api.post(`/payment/refund/${refundId}/process`);
   },

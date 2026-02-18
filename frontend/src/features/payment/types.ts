@@ -21,3 +21,15 @@ export interface PaymentItem {
     email: string;
   };
 }
+
+export interface DuesPaymentResponse {
+  token: string;
+  redirect_url: string;
+  amount: number;
+  breakdown: Array<{
+    id: string;
+    price: number;
+    quantity: number;
+    name: string;
+  }>;
+}

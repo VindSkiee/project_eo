@@ -1,6 +1,6 @@
 // Group/Community-related API operations
 import { api } from "@/shared/lib/axios";
-import type { ApiResponse, GroupItem, WalletDetail } from "@/shared/types";
+import type { ApiResponse, GroupItem, WalletDetail, HierarchyData } from "@/shared/types";
 
 export const groupService = {
   /** Get list of groups (organizations) */
@@ -30,5 +30,11 @@ export const groupService = {
   /** Delete group */
   delete: async (id: number): Promise<void> => {
     await api.delete(`/groups/${id}`);
+  },
+
+  /** Get hierarchy (RW + all RT groups with officers) */
+  getHierarchy: async (): Promise<HierarchyData> => {
+    const response = await api.get<ApiResponse<HierarchyData>>("/groups/hierarchy");
+    return response.data.data;
   },
 };

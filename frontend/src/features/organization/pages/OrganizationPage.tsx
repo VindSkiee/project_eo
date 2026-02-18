@@ -3,9 +3,6 @@ import { useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -22,11 +19,13 @@ import {
   Trash2,
   ChevronDown,
   Pencil,
+  Users,
+  Crown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { groupService } from "@/features/organization/services/groupService";
 import { userService } from "@/shared/services/userService";
-import type { GroupItem, UserItem } from "@/shared/types";
+import type { GroupItem, UserItem, HierarchyData } from "@/shared/types";
 import {
   OrganizationSummaryCards,
   CreateRtDialog,
@@ -37,119 +36,460 @@ import {
   WargaTable,
 } from "@/features/organization/components";
 
+// === HELPERS ===
+
+function getRoleFromStorage(): string | null {
+  try {
+    const stored = localStorage.getItem("user");
+    if (stored) return JSON.parse(stored).role;
+  } catch { /* ignore */ }
+  return null;
+}
+
+function getGroupIdFromStorage(): number | null {
+  try {
+    const stored = localStorage.getItem("user");
+    if (stored) return JSON.parse(stored).communityGroupId ?? null;
+  } catch { /* ignore */ }
+  return null;
+}
+
+function getUserIdFromStorage(): string | null {
+  try {
+    const stored = localStorage.getItem("user");
+    if (stored) return JSON.parse(stored).id ?? null;
+  } catch { /* ignore */ }
+  return null;
+}
+
+// =============================================
+// MAIN COMPONENT
+// =============================================
 export default function OrganizationPage() {
   const navigate = useNavigate();
+  const userRole = getRoleFromStorage();
+  const userGroupId = getGroupIdFromStorage();
+
+  if (userRole === "LEADER") {
+    return <LeaderView navigate={navigate} />;
+  }
+  if (userRole === "TREASURER") {
+    return <TreasurerView navigate={navigate} userGroupId={userGroupId} />;
+  }
+  if (userRole === "ADMIN") {
+    return <AdminView navigate={navigate} userGroupId={userGroupId} />;
+  }
+  return <ResidentView navigate={navigate} userGroupId={userGroupId} />;
+}
+
+// =============================================
+// LEADER VIEW (Full CRUD)
+// =============================================
+function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
   const [groups, setGroups] = useState<GroupItem[]>([]);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchRT, setSearchRT] = useState("");
   const [searchWarga, setSearchWarga] = useState("");
-
-  // Dialog states
   const [submitting, setSubmitting] = useState(false);
-
-  // Edit RT Dialog
   const [editingGroup, setEditingGroup] = useState<GroupItem | null>(null);
   const [editGroupName, setEditGroupName] = useState("");
-
-  // Edit User Dialog
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
   const [editUserForm, setEditUserForm] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    address: "",
-    roleType: "RESIDENT",
+    fullName: "", email: "", phone: "", address: "", roleType: "RESIDENT",
     communityGroupId: undefined as number | undefined,
   });
-
-  // Collapsible state: which RT is expanded
   const [expandedRT, setExpandedRT] = useState<number | null>(null);
   const [rtMembers, setRtMembers] = useState<Record<number, UserItem[]>>({});
   const [rtMemberCounts, setRtMemberCounts] = useState<Record<number, number>>({});
   const [loadingMembers, setLoadingMembers] = useState<number | null>(null);
 
-  // Check role from localStorage
-  const userRole = (() => {
-    try {
-      const stored = localStorage.getItem("user");
-      if (stored) return JSON.parse(stored).role;
-    } catch { /* ignore */ }
-    return null;
-  })();
-
-  const isLeader = userRole === "LEADER";
-
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const [groupsData, usersData] = await Promise.allSettled([
-        groupService.getAll(),
-        isLeader ? userService.getAll() : Promise.resolve([]),
+        groupService.getAll(), userService.getAll(),
       ]);
-
       if (groupsData.status === "fulfilled") setGroups(groupsData.value);
       if (usersData.status === "fulfilled") setUsers(usersData.value);
-
       if (groupsData.status === "rejected") toast.error("Gagal memuat data organisasi.");
-      
-      // Fetch member counts for all RT groups
-      if (isLeader && groupsData.status === "fulfilled") {
+      if (groupsData.status === "fulfilled") {
         const rtGroupsData = groupsData.value.filter((g) => g.type === "RT");
         const countPromises = rtGroupsData.map((rt) =>
-          userService.getCountByGroup(rt.id)
-            .then((count) => ({ id: rt.id, count }))
-            .catch(() => ({ id: rt.id, count: 0 }))
+          userService.getCountByGroup(rt.id).then((count) => ({ id: rt.id, count })).catch(() => ({ id: rt.id, count: 0 }))
         );
         const counts = await Promise.all(countPromises);
-        const countsMap = counts.reduce((acc, { id, count }) => {
-          acc[id] = count;
-          return acc;
-        }, {} as Record<number, number>);
-        setRtMemberCounts(countsMap);
+        setRtMemberCounts(counts.reduce((acc, { id, count }) => { acc[id] = count; return acc; }, {} as Record<number, number>));
       }
-    } catch {
-      toast.error("Gagal memuat data.");
-    } finally {
-      setLoading(false);
-    }
+    } catch { toast.error("Gagal memuat data."); }
+    finally { setLoading(false); }
   };
 
   const rwGroups = groups.filter((g) => g.type === "RW");
   const rtGroups = groups.filter((g) => g.type === "RT");
-
-  const filteredRT = rtGroups.filter((g) =>
-    g.name.toLowerCase().includes(searchRT.toLowerCase())
-  );
-
+  const filteredRT = rtGroups.filter((g) => g.name.toLowerCase().includes(searchRT.toLowerCase()));
   const filteredWarga = users.filter(
-    (u) =>
-      u.fullName.toLowerCase().includes(searchWarga.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchWarga.toLowerCase())
+    (u) => u.fullName.toLowerCase().includes(searchWarga.toLowerCase()) || u.email.toLowerCase().includes(searchWarga.toLowerCase())
   );
 
-  // === Fetch members for an RT group ===
   const fetchRTMembers = useCallback(async (groupId: number) => {
     if (rtMembers[groupId]) return;
     setLoadingMembers(groupId);
     try {
       const res = await userService.getFiltered({ communityGroupId: groupId, limit: 100 });
-
-      // Handle response structure: res is the data array or res.data contains the array
       const usersArray = Array.isArray(res) ? res : (res?.data || []);
-
       setRtMembers((prev) => ({ ...prev, [groupId]: usersArray }));
+    } catch { toast.error("Gagal memuat anggota RT."); }
+    finally { setLoadingMembers(null); }
+  }, [rtMembers]);
 
-    } catch (err) {
-      console.error(err);
-      toast.error("Gagal memuat anggota RT.");
-    } finally {
-      setLoadingMembers(null);
+  const toggleRT = (groupId: number) => {
+    if (expandedRT === groupId) { setExpandedRT(null); } else { setExpandedRT(groupId); fetchRTMembers(groupId); }
+  };
+
+  const openEditGroup = (group: GroupItem) => { setEditingGroup(group); setEditGroupName(group.name); };
+
+  const openEditUser = (user: UserItem) => {
+    setEditingUser(user);
+    const actualRole = user.roleType || user.role?.type || "RESIDENT";
+    const actualGroupId = user.communityGroupId || user.communityGroup?.id;
+    setEditUserForm({
+      fullName: user.fullName, email: user.email, phone: user.phone || "", address: user.address || "",
+      roleType: actualRole, communityGroupId: actualGroupId ?? undefined,
+    });
+  };
+
+  const handleDeleteGroup = async (id: number, name: string) => {
+    if (!confirm(`Yakin ingin menghapus ${name}?`)) return;
+    try { await groupService.delete(id); toast.success(`${name} berhasil dihapus.`); fetchData(); } catch { toast.error("Gagal menghapus grup."); }
+  };
+
+  const handleDeleteUser = async (id: string, name: string) => {
+    if (!confirm(`Yakin ingin menghapus ${name}?`)) return;
+    try { await userService.delete(id); toast.success(`${name} berhasil dihapus.`); fetchData(); } catch { toast.error("Gagal menghapus warga."); }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <OrgHeader />
+      <OrganizationSummaryCards groups={groups} rwGroups={rwGroups} rtGroups={rtGroups} users={users} loading={loading} isLeader={true} />
+      <Tabs defaultValue="data-rt" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="data-rt">Data RT</TabsTrigger>
+          <TabsTrigger value="data-warga">Data Warga</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="data-rt" className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input placeholder="Cari RT..." value={searchRT} onChange={(e) => setSearchRT(e.target.value)} className="pl-9 h-10" />
+            </div>
+            <CreateRtDialog onSuccess={fetchData} />
+          </div>
+
+          {loading ? <LoadingSkeletons /> : filteredRT.length === 0 ? (
+            <EmptyState text={searchRT ? "RT tidak ditemukan" : "Belum ada data RT"} subtext={searchRT ? "Coba kata kunci lain" : "Mulai dengan menambahkan RT baru"} />
+          ) : (
+            <div className="space-y-3">
+              {filteredRT.map((group) => {
+                const parentRw = rwGroups.find((rw) => rw.id === group.parentId);
+                const isExpanded = expandedRT === group.id;
+                const members = rtMembers[group.id] || [];
+                const isLoadingThisRT = loadingMembers === group.id;
+                return (
+                  <Collapsible key={group.id} open={isExpanded} onOpenChange={() => toggleRT(group.id)}>
+                    <Card className="overflow-hidden border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                      <CollapsibleTrigger asChild>
+                        <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50/80 transition-colors">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <ChevronDown className={`h-4 w-4 text-slate-400 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"}`} />
+                            <div className="min-w-0">
+                              <p className="font-medium text-slate-900 text-sm sm:text-base">{group.name}</p>
+                              <p className="text-xs text-slate-500">{parentRw?.name || ""}  {rtMemberCounts[group.id] !== undefined ? `${rtMemberCounts[group.id]} warga` : ""}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Badge variant="secondary" className="text-xs font-medium bg-slate-100 text-slate-600 border-0 mr-1">{group.type}</Badge>
+                            <button onClick={(e) => { e.stopPropagation(); openEditGroup(group); }} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-blue-500 transition-all" title="Edit RT"><Pencil className="h-3.5 w-3.5" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id, group.name); }} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-rose-500 transition-all" title="Hapus RT"><Trash2 className="h-3.5 w-3.5" /></button>
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="border-t border-slate-100 bg-slate-50/50 p-4">
+                          <RtMemberTable members={members} loading={isLoadingThisRT} currentUserId={getUserIdFromStorage() || undefined} onMemberClick={(memberId) => navigate(`/dashboard/users/${memberId}`)} onEdit={openEditUser} onDelete={handleDeleteUser} />
+                        </div>
+                      </CollapsibleContent>
+                    </Card>
+                  </Collapsible>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="data-warga" className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input placeholder="Cari warga..." value={searchWarga} onChange={(e) => setSearchWarga(e.target.value)} className="pl-9 h-10" />
+            </div>
+            <CreateWargaDialog groups={groups} onSuccess={fetchData} />
+          </div>
+          <WargaTable users={filteredWarga} loading={loading} searchQuery={searchWarga} currentUserId={getUserIdFromStorage() || undefined} onUserClick={(userId) => navigate(`/dashboard/users/${userId}`)} onEdit={openEditUser} onDelete={handleDeleteUser} />
+        </TabsContent>
+      </Tabs>
+
+      <EditRtDialog group={editingGroup} name={editGroupName} onNameChange={setEditGroupName} onClose={() => setEditingGroup(null)}
+        onSuccess={() => { setEditingGroup(null); fetchData(); if (editingGroup) setRtMembers((prev) => { const copy = { ...prev }; delete copy[editingGroup.id]; return copy; }); }}
+        submitting={submitting} setSubmitting={setSubmitting} />
+      <EditWargaDialog user={editingUser} groups={groups} form={editUserForm} onFormChange={setEditUserForm} onClose={() => setEditingUser(null)}
+        onSuccess={() => { setEditingUser(null); fetchData(); setRtMembers({}); }}
+        submitting={submitting} setSubmitting={setSubmitting} />
+    </div>
+  );
+}
+
+// =============================================
+// TREASURER VIEW (Read-only)
+// =============================================
+function TreasurerView({ navigate, userGroupId }: { navigate: ReturnType<typeof useNavigate>; userGroupId: number | null }) {
+  const [hierarchy, setHierarchy] = useState<HierarchyData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [searchRT, setSearchRT] = useState("");
+  const [expandedRT, setExpandedRT] = useState<number | null>(null);
+  const [rtMembers, setRtMembers] = useState<Record<number, UserItem[]>>({});
+  const [loadingMembers, setLoadingMembers] = useState<number | null>(null);
+
+  useEffect(() => { fetchData(); }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try { const data = await groupService.getHierarchy(); setHierarchy(data); }
+    catch { toast.error("Gagal memuat data organisasi."); }
+    finally { setLoading(false); }
+  };
+
+  const fetchRTMembers = useCallback(async (groupId: number) => {
+    if (rtMembers[groupId]) return;
+    setLoadingMembers(groupId);
+    try {
+      const res = await userService.getFiltered({ communityGroupId: groupId, limit: 100 });
+      const usersArray = Array.isArray(res) ? res : (res?.data || []);
+      setRtMembers((prev) => ({ ...prev, [groupId]: usersArray }));
+    } catch { toast.error("Gagal memuat anggota RT."); }
+    finally { setLoadingMembers(null); }
+  }, [rtMembers]);
+
+  const toggleRT = (groupId: number) => {
+    if (expandedRT === groupId) { setExpandedRT(null); } else { setExpandedRT(groupId); fetchRTMembers(groupId); }
+  };
+
+  const filteredRT = (hierarchy?.rtGroups || []).filter((g) => g.name.toLowerCase().includes(searchRT.toLowerCase()));
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <OrgHeader subtitle="Lihat struktur organisasi RT/RW." />
+      {loading ? <Skeleton className="h-24 w-full rounded-xl" /> : hierarchy?.rw && (
+        <RwInfoCard rw={hierarchy.rw} rtCount={hierarchy.rtGroups.length} />
+      )}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <h2 className="text-lg font-semibold text-slate-800 font-poppins">Daftar RT</h2>
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input placeholder="Cari RT..." value={searchRT} onChange={(e) => setSearchRT(e.target.value)} className="pl-9 h-10" />
+          </div>
+        </div>
+        {loading ? <LoadingSkeletons /> : filteredRT.length === 0 ? <EmptyState text="Belum ada RT" /> : (
+          <div className="space-y-3">
+            {filteredRT.map((rt) => {
+              const isExpanded = expandedRT === rt.id;
+              const members = rtMembers[rt.id] || [];
+              const isLoadingThisRT = loadingMembers === rt.id;
+              return (
+                <Collapsible key={rt.id} open={isExpanded} onOpenChange={() => toggleRT(rt.id)}>
+                  <Card className="overflow-hidden border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                    <CollapsibleTrigger asChild>
+                      <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50/80 transition-colors">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <ChevronDown className={`h-4 w-4 text-slate-400 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"}`} />
+                          <div className="min-w-0">
+                            <p className="font-medium text-slate-900 text-sm sm:text-base">{rt.name}</p>
+                            <p className="text-xs text-slate-500">{rt.memberCount} warga</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {rt.admin && <span className="text-xs text-slate-500 hidden sm:inline">Ketua: {rt.admin.fullName}</span>}
+                          <Badge variant="secondary" className="text-xs">{rt.type}</Badge>
+                        </div>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="border-t border-slate-100 bg-slate-50/50 p-4 space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <OfficerBadge label="Ketua RT" officer={rt.admin} />
+                          <OfficerBadge label="Bendahara RT" officer={rt.treasurer} />
+                        </div>
+                        <ReadOnlyMemberTable members={members} loading={isLoadingThisRT} navigate={navigate} currentUserId={getUserIdFromStorage() || undefined} />
+                      </div>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================
+// ADMIN VIEW (Own RT highlighted + sibling RTs)
+// =============================================
+function AdminView({ navigate, userGroupId }: { navigate: ReturnType<typeof useNavigate>; userGroupId: number | null }) {
+  const [hierarchy, setHierarchy] = useState<HierarchyData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedRT, setExpandedRT] = useState<number | null>(null);
+  const [rtMembers, setRtMembers] = useState<Record<number, UserItem[]>>({});
+  const [loadingMembers, setLoadingMembers] = useState<number | null>(null);
+
+  useEffect(() => { fetchData(); }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const data = await groupService.getHierarchy();
+      setHierarchy(data);
+      if (userGroupId) setExpandedRT(userGroupId);
+    } catch { toast.error("Gagal memuat data organisasi."); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => {
+    if (userGroupId && !rtMembers[userGroupId] && hierarchy) fetchRTMembersById(userGroupId);
+  }, [hierarchy, userGroupId]);
+
+  const fetchRTMembersById = useCallback(async (groupId: number) => {
+    if (rtMembers[groupId]) return;
+    setLoadingMembers(groupId);
+    try {
+      const res = await userService.getFiltered({ communityGroupId: groupId, limit: 100 });
+      const usersArray = Array.isArray(res) ? res : (res?.data || []);
+      setRtMembers((prev) => ({ ...prev, [groupId]: usersArray }));
+    } catch { toast.error("Gagal memuat anggota RT."); }
+    finally { setLoadingMembers(null); }
+  }, [rtMembers]);
+
+  const toggleRT = (groupId: number) => {
+    if (expandedRT === groupId) { setExpandedRT(null); } else { setExpandedRT(groupId); fetchRTMembersById(groupId); }
+  };
+
+  const sortedRTs = [...(hierarchy?.rtGroups || [])].sort((a, b) => {
+    if (a.id === userGroupId) return -1;
+    if (b.id === userGroupId) return 1;
+    return 0;
+  });
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <OrgHeader subtitle="Kelola data warga RT dan lihat struktur organisasi." />
+      {loading ? <Skeleton className="h-24 w-full rounded-xl" /> : hierarchy?.rw && (
+        <RwInfoCard rw={hierarchy.rw} rtCount={hierarchy.rtGroups.length} navigate={navigate} clickableOfficers />
+      )}
+      {loading ? <LoadingSkeletons /> : (
+        <div className="space-y-3">
+          {sortedRTs.map((rt) => {
+            const isOwn = rt.id === userGroupId;
+            const isExpanded = expandedRT === rt.id;
+            const members = rtMembers[rt.id] || [];
+            const isLoadingThisRT = loadingMembers === rt.id;
+            return (
+              <Collapsible key={rt.id} open={isExpanded} onOpenChange={() => toggleRT(rt.id)}>
+                <Card className={`overflow-hidden transition-shadow ${isOwn ? "border-primary/40 shadow-md ring-1 ring-primary/20" : "border-slate-100 shadow-sm hover:shadow-md"}`}>
+                  <CollapsibleTrigger asChild>
+                    <div className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${isOwn ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-slate-50/80"}`}>
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"} ${isOwn ? "text-primary" : "text-slate-400"}`} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className={`font-medium text-sm sm:text-base ${isOwn ? "text-primary" : "text-slate-900"}`}>{rt.name}</p>
+                            {isOwn && <Badge variant="default" className="text-[10px]">RT Anda</Badge>}
+                          </div>
+                          <p className="text-xs text-slate-500">{rt.memberCount} warga</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {rt.admin && <span className="text-xs text-slate-500 hidden sm:inline">Ketua: {rt.admin.fullName}</span>}
+                        <Badge variant="secondary" className="text-xs">{rt.type}</Badge>
+                      </div>
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="border-t border-slate-100 bg-slate-50/50 p-4 space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <OfficerBadge label="Ketua RT" officer={rt.admin} clickable={isOwn} onClick={() => isOwn && rt.admin && navigate(`/dashboard/users/${rt.admin.id}`)} />
+                        <OfficerBadge label="Bendahara RT" officer={rt.treasurer} clickable={isOwn} onClick={() => isOwn && rt.treasurer && navigate(`/dashboard/users/${rt.treasurer.id}`)} />
+                      </div>
+                      {isOwn ? (
+                        <ReadOnlyMemberTable members={members} loading={isLoadingThisRT} navigate={navigate} showDetail currentUserId={getUserIdFromStorage() || undefined} />
+                      ) : (
+                        <p className="text-xs text-slate-400 text-center py-2">Hanya dapat melihat anggota RT Anda sendiri.</p>
+                      )}
+                    </div>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================
+// RESIDENT VIEW (Read-only, own RT member list only)
+// =============================================
+function ResidentView({ navigate, userGroupId }: { navigate: ReturnType<typeof useNavigate>; userGroupId: number | null }) {
+  const [hierarchy, setHierarchy] = useState<HierarchyData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedRT, setExpandedRT] = useState<number | null>(null);
+  const [rtMembers, setRtMembers] = useState<Record<number, UserItem[]>>({});
+  const [loadingMembers, setLoadingMembers] = useState<number | null>(null);
+  const currentUserId = getUserIdFromStorage();
+
+  useEffect(() => { fetchData(); }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const data = await groupService.getHierarchy();
+      setHierarchy(data);
+      if (userGroupId) setExpandedRT(userGroupId);
     }
+    catch { toast.error("Gagal memuat data organisasi."); }
+    finally { setLoading(false); }
+  };
+
+  // Auto-fetch own RT members after hierarchy loads
+  useEffect(() => {
+    if (userGroupId && !rtMembers[userGroupId] && hierarchy) fetchRTMembersById(userGroupId);
+  }, [hierarchy, userGroupId]);
+
+  const fetchRTMembersById = useCallback(async (groupId: number) => {
+    if (rtMembers[groupId]) return;
+    setLoadingMembers(groupId);
+    try {
+      const res = await userService.getFiltered({ communityGroupId: groupId, limit: 100 });
+      const usersArray = Array.isArray(res) ? res : (res?.data || []);
+      setRtMembers((prev) => ({ ...prev, [groupId]: usersArray }));
+    } catch { toast.error("Gagal memuat anggota RT."); }
+    finally { setLoadingMembers(null); }
   }, [rtMembers]);
 
   const toggleRT = (groupId: number) => {
@@ -157,386 +497,210 @@ export default function OrganizationPage() {
       setExpandedRT(null);
     } else {
       setExpandedRT(groupId);
-      fetchRTMembers(groupId);
+      // Only fetch members for own RT
+      if (groupId === userGroupId) fetchRTMembersById(groupId);
     }
   };
 
-  // === Open Edit Dialogs ===
-  const openEditGroup = (group: GroupItem) => {
-    setEditingGroup(group);
-    setEditGroupName(group.name);
-  };
-
-  // === Handle Edit User ===
-  const openEditUser = (user: UserItem) => {
-    setEditingUser(user);
-
-    // LOGIKA PERBAIKAN DISINI:
-    // Ambil role dari roleType ATAU role.type
-    const actualRole = user.roleType || user.role?.type || "RESIDENT";
-
-    // Ambil Group ID (jaga-jaga jika backend kirim object communityGroup)
-    const actualGroupId = user.communityGroupId || user.communityGroup?.id;
-
-    setEditUserForm({
-      fullName: user.fullName,
-      email: user.email,
-      phone: user.phone || "",
-      address: user.address || "",
-      roleType: actualRole, // Gunakan hasil deteksi diatas
-      communityGroupId: actualGroupId ?? undefined,
-    });
-  };
-
-  // === Handle Delete RT ===
-  const handleDeleteGroup = async (id: number, name: string) => {
-    if (!confirm(`Yakin ingin menghapus ${name}? Aksi ini tidak dapat dibatalkan.`)) return;
-    try {
-      await groupService.delete(id);
-      toast.success(`${name} berhasil dihapus.`);
-      fetchData();
-    } catch {
-      toast.error("Gagal menghapus grup.");
-    }
-  };
-
-  // === Handle Delete User ===
-  const handleDeleteUser = async (id: string, name: string) => {
-    if (!confirm(`Yakin ingin menghapus ${name}? Aksi ini tidak dapat dibatalkan.`)) return;
-    try {
-      await userService.delete(id);
-      toast.success(`${name} berhasil dihapus.`);
-      fetchData();
-    } catch {
-      toast.error("Gagal menghapus warga.");
-    }
-  };
+  const sortedRTs = [...(hierarchy?.rtGroups || [])].sort((a, b) => {
+    if (a.id === userGroupId) return -1;
+    if (b.id === userGroupId) return 1;
+    return 0;
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold font-poppins text-slate-900">
-            Organisasi
-          </h1>
-          <p className="text-sm sm:text-base text-slate-500 mt-1">
-            Kelola data RT dan Warga di lingkungan Anda.
-          </p>
+      <OrgHeader subtitle="Lihat struktur organisasi RT/RW Anda." />
+      {loading ? <Skeleton className="h-24 w-full rounded-xl" /> : hierarchy?.rw && (
+        <RwInfoCard rw={hierarchy.rw} rtCount={hierarchy.rtGroups.length} />
+      )}
+      {loading ? <LoadingSkeletons /> : (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-slate-800 font-poppins">Daftar RT</h2>
+          <div className="space-y-3">
+            {sortedRTs.map((rt) => {
+              const isOwn = rt.id === userGroupId;
+              const isExpanded = expandedRT === rt.id;
+              const members = rtMembers[rt.id] || [];
+              const isLoadingThisRT = loadingMembers === rt.id;
+              return (
+                <Collapsible key={rt.id} open={isExpanded} onOpenChange={() => toggleRT(rt.id)}>
+                  <Card className={`overflow-hidden transition-shadow ${isOwn ? "border-primary/40 shadow-md ring-1 ring-primary/20" : "border-slate-100 shadow-sm hover:shadow-md"}`}>
+                    <CollapsibleTrigger asChild>
+                      <div className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${isOwn ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-slate-50/80"}`}>
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"} ${isOwn ? "text-primary" : "text-slate-400"}`} />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className={`font-medium text-sm sm:text-base ${isOwn ? "text-primary" : "text-slate-900"}`}>{rt.name}</p>
+                              {isOwn && <Badge variant="default" className="text-[10px]">RT Anda</Badge>}
+                            </div>
+                            <p className="text-xs text-slate-500">{rt.memberCount} warga</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {rt.admin && <span className="text-xs text-slate-500 hidden sm:inline">Ketua: {rt.admin.fullName}</span>}
+                          <Badge variant="secondary" className="text-xs">{rt.type}</Badge>
+                        </div>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="border-t border-slate-100 bg-slate-50/50 p-4 space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <OfficerBadge label="Ketua RT" officer={rt.admin} />
+                          <OfficerBadge label="Bendahara RT" officer={rt.treasurer} />
+                        </div>
+                        {isOwn ? (
+                          <ReadOnlyMemberTable members={members} loading={isLoadingThisRT} navigate={navigate} currentUserId={currentUserId || undefined} />
+                        ) : (
+                          <p className="text-xs text-slate-400 text-center py-2">Hanya dapat melihat anggota RT Anda sendiri.</p>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              );
+            })}
+          </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================
+// SHARED SUB-COMPONENTS
+// =============================================
+
+function OrgHeader({ subtitle }: { subtitle?: string }) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold font-poppins text-slate-900">Organisasi</h1>
+        <p className="text-sm sm:text-base text-slate-500 mt-1">{subtitle || "Kelola data RT dan Warga di lingkungan Anda."}</p>
       </div>
+    </div>
+  );
+}
 
-      {/* Summary Cards */}
-      <OrganizationSummaryCards
-        groups={groups}
-        rwGroups={rwGroups}
-        rtGroups={rtGroups}
-        users={users}
-        loading={loading}
-        isLeader={isLeader}
-      />
+function RwInfoCard({ rw, rtCount, navigate, clickableOfficers }: {
+  rw: HierarchyData["rw"];
+  rtCount: number;
+  navigate?: ReturnType<typeof useNavigate>;
+  clickableOfficers?: boolean;
+}) {
+  return (
+    <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+      <CardContent className="py-4">
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Crown className="h-6 w-6 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-slate-900">{rw.name}</p>
+            <p className="text-xs text-slate-500">{rw.memberCount} anggota  {rtCount} RT</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          <OfficerBadge label="Ketua RW" officer={rw.leader}
+            clickable={clickableOfficers} onClick={() => clickableOfficers && rw.leader && navigate?.(`/dashboard/users/${rw.leader.id}`)} />
+          <OfficerBadge label="Bendahara RW" officer={rw.treasurer}
+            clickable={clickableOfficers} onClick={() => clickableOfficers && rw.treasurer && navigate?.(`/dashboard/users/${rw.treasurer.id}`)} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-      {/* === TABS: Data RT / Data Warga === */}
-      {isLeader ? (
-        <Tabs defaultValue="data-rt" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="data-rt">Data RT</TabsTrigger>
-            <TabsTrigger value="data-warga">Data Warga</TabsTrigger>
-          </TabsList>
-
-          {/* === TAB: Data RT === */}
-          <TabsContent value="data-rt" className="space-y-6">
-            {/* Header Section */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Cari RT..."
-                  value={searchRT}
-                  onChange={(e) => setSearchRT(e.target.value)}
-                  className="pl-9 border-slate-200 focus:border-slate-300 h-10"
-                />
-              </div>
-
-              <CreateRtDialog onSuccess={fetchData} />
-            </div>
-
-            {/* Loading State */}
-            {loading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-20 w-full rounded-xl" />
-                ))}
-              </div>
-            ) : filteredRT.length === 0 ? (
-              /* Empty State */
-              <div className="flex flex-col items-center justify-center py-16 px-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/30">
-                <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-                  <Building2 className="h-6 w-6 text-slate-400" />
-                </div>
-                <p className="text-sm font-medium text-slate-600">
-                  {searchRT ? "RT tidak ditemukan" : "Belum ada data RT"}
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  {searchRT ? "Coba gunakan kata kunci lain" : "Mulai dengan menambahkan RT baru"}
-                </p>
-              </div>
-            ) : (
-              /* RT List */
-              <div className="space-y-3">
-                {filteredRT.map((group) => {
-                  const parentRw = rwGroups.find((rw) => rw.id === group.parentId);
-                  const isExpanded = expandedRT === group.id;
-                  const members = rtMembers[group.id] || [];
-                  const isLoadingThisRT = loadingMembers === group.id;
-
-                  return (
-                    <Collapsible
-                      key={group.id}
-                      open={isExpanded}
-                      onOpenChange={() => toggleRT(group.id)}
-                    >
-                      <Card className="overflow-hidden border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-200">
-                        {/* RT Header - Collapsible Trigger */}
-                        <CollapsibleTrigger asChild>
-                          <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50/80 transition-colors">
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <ChevronDown
-                                className={`h-4 w-4 text-slate-400 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"
-                                  }`}
-                              />
-                              <div className="min-w-0">
-                                <p className="font-medium text-slate-900 text-sm sm:text-base">
-                                  {group.name}
-                                </p>
-                               
-                                <p className="text-xs text-slate-500">
-                                  {parentRw?.name || "—"} &middot;{" "}
-                                  {rtMemberCounts[group.id] !== undefined 
-                                    ? `${rtMemberCounts[group.id]} warga` 
-                                    : "—"}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <Badge
-                                variant="secondary"
-                                className="text-xs font-medium bg-slate-100 text-slate-600 border-0 mr-1"
-                              >
-                                {group.type}
-                              </Badge>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEditGroup(group);
-                                }}
-                                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-blue-500 transition-all duration-200"
-                                title="Edit RT"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteGroup(group.id, group.name);
-                                }}
-                                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-rose-500 transition-all duration-200"
-                                title="Hapus RT"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        </CollapsibleTrigger>
-
-                        {/* Expanded Content - Member List */}
-                        <CollapsibleContent>
-                          <div className="border-t border-slate-100 bg-slate-50/50 p-4">
-                            <RtMemberTable
-                              members={members}
-                              loading={isLoadingThisRT}
-                              onMemberClick={(memberId) => navigate(`/dashboard/users/${memberId}`)}
-                              onEdit={openEditUser}
-                              onDelete={handleDeleteUser}
-                            />
-                          </div>
-                        </CollapsibleContent>
-                      </Card>
-                    </Collapsible>
-                  );
-                })}
-              </div>
-            )}
-          </TabsContent>
-
-          {/* === TAB: Data Warga === */}
-          <TabsContent value="data-warga" className="space-y-6">
-            {/* Header Section */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Cari warga..."
-                  value={searchWarga}
-                  onChange={(e) => setSearchWarga(e.target.value)}
-                  className="pl-9 border-slate-200 focus:border-slate-300 h-10"
-                />
-              </div>
-
-              <CreateWargaDialog groups={groups} onSuccess={fetchData} />
-            </div>
-
-            {/* Table Section */}
-            <WargaTable
-              users={filteredWarga}
-              loading={loading}
-              searchQuery={searchWarga}
-              onUserClick={(userId) => navigate(`/dashboard/users/${userId}`)}
-              onEdit={openEditUser}
-              onDelete={handleDeleteUser}
-            />
-          </TabsContent>
-        </Tabs>
+function OfficerBadge({ label, officer, clickable, onClick }: {
+  label: string;
+  officer: { id: string; fullName: string; email: string; phone?: string | null } | null;
+  clickable?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-lg border border-slate-100 bg-white p-3 ${clickable && officer ? "cursor-pointer hover:border-primary/30 hover:bg-primary/5 transition-colors" : ""}`}
+      onClick={clickable && officer ? onClick : undefined}
+    >
+      <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">{label}</p>
+      {officer ? (
+        <>
+          <p className="text-sm font-semibold text-slate-900 mt-0.5">{officer.fullName}</p>
+          <p className="text-xs text-slate-500">{officer.email}</p>
+        </>
       ) : (
-        /* === NON-LEADER VIEW (RESIDENT) - Simple Card List === */
-        <>
-          {loading ? (
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {[1, 2, 3].map((i) => (
-                <Card key={i}>
-                  <CardHeader>
-                    <Skeleton className="h-5 w-32" />
-                    <Skeleton className="h-4 w-20 mt-1" />
-                  </CardHeader>
-                </Card>
-              ))}
-            </div>
-          ) : groups.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-10 text-center">
-                <Building2 className="h-10 w-10 text-slate-300 mb-3" />
-                <p className="text-sm text-slate-500 font-medium">
-                  Belum ada data organisasi.
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Data organisasi RT/RW akan tampil di sini.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              {rwGroups.length > 0 && (
-                <div>
-                  <h2 className="text-base sm:text-lg font-semibold text-slate-800 mb-3 font-poppins">
-                    Rukun Warga (RW)
-                  </h2>
-                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                    {rwGroups.map((group) => (
-                      <Card key={group.id}>
-                        <CardHeader>
-                          <div className="flex items-center justify-between">
-                            <CardTitle className="text-sm sm:text-base font-semibold text-slate-900">
-                              {group.name}
-                            </CardTitle>
-                            <Badge variant="default" className="text-[10px] sm:text-xs">
-                              {group.type}
-                            </Badge>
-                          </div>
-                          <CardDescription className="text-xs text-slate-400">
-                            Dibuat{" "}
-                            {new Date(group.createdAt).toLocaleDateString("id-ID", {
-                              day: "numeric",
-                              month: "long",
-                              year: "numeric",
-                            })}
-                          </CardDescription>
-                        </CardHeader>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {rtGroups.length > 0 && (
-                <div>
-                  <h2 className="text-base sm:text-lg font-semibold text-slate-800 mb-3 font-poppins">
-                    Rukun Tetangga (RT)
-                  </h2>
-                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                    {rtGroups.map((group) => {
-                      const parentRw = rwGroups.find((rw) => rw.id === group.parentId);
-                      return (
-                        <Card key={group.id}>
-                          <CardHeader>
-                            <div className="flex items-center justify-between">
-                              <CardTitle className="text-sm sm:text-base font-semibold text-slate-900">
-                                {group.name}
-                              </CardTitle>
-                              <Badge variant="secondary" className="text-[10px] sm:text-xs">
-                                {group.type}
-                              </Badge>
-                            </div>
-                            <CardDescription className="text-xs text-slate-400">
-                              {parentRw ? `Bagian dari ${parentRw.name}` : "Tanpa induk RW"}
-                              {" · "}
-                              Dibuat{" "}
-                              {new Date(group.createdAt).toLocaleDateString("id-ID", {
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric",
-                              })}
-                            </CardDescription>
-                          </CardHeader>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </>
+        <p className="text-sm text-slate-400 mt-0.5">Belum ditentukan</p>
       )}
-      
-      {/* === Edit Dialogs === */}
-      {isLeader && (
-        <>
-          <EditRtDialog
-            group={editingGroup}
-            name={editGroupName}
-            onNameChange={setEditGroupName}
-            onClose={() => setEditingGroup(null)}
-            onSuccess={() => {
-              setEditingGroup(null);
-              fetchData();
-              if (editingGroup) {
-                setRtMembers((prev) => {
-                  const copy = { ...prev };
-                  delete copy[editingGroup.id];
-                  return copy;
-                });
-              }
-            }}
-            submitting={submitting}
-            setSubmitting={setSubmitting}
-          />
+    </div>
+  );
+}
 
-          <EditWargaDialog
-            user={editingUser}
-            groups={groups}
-            form={editUserForm}
-            onFormChange={setEditUserForm}
-            onClose={() => setEditingUser(null)}
-            onSuccess={() => {
-              setEditingUser(null);
-              fetchData();
-              setRtMembers({});
-            }}
-            submitting={submitting}
-            setSubmitting={setSubmitting}
-          />
-        </>
-      )}
+function ReadOnlyMemberTable({ members, loading, navigate, showDetail, currentUserId }: {
+  members: UserItem[];
+  loading: boolean;
+  navigate: ReturnType<typeof useNavigate>;
+  showDetail?: boolean;
+  currentUserId?: string;
+}) {
+  const getPriority = (u: UserItem): number => {
+    if (currentUserId && u.id === currentUserId) return 0;
+    const r = u.roleType || u.role?.type || "RESIDENT";
+    if (r === "LEADER" || r === "ADMIN") return 1;
+    if (r === "TREASURER") return 2;
+    return 3;
+  };
+  const sorted = [...members].sort((a, b) => getPriority(a) - getPriority(b));
+
+  if (loading) return <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}</div>;
+  if (members.length === 0) return <p className="text-sm text-slate-400 text-center py-4">Belum ada anggota.</p>;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200">
+            <th className="text-left text-xs font-medium text-slate-500 px-3 py-2">Nama</th>
+            <th className="text-left text-xs font-medium text-slate-500 px-3 py-2 hidden sm:table-cell">Email</th>
+            <th className="text-left text-xs font-medium text-slate-500 px-3 py-2">Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((m) => {
+            const isSelf = !!(currentUserId && m.id === currentUserId);
+            return (
+              <tr key={m.id} className={`border-b border-slate-50 ${showDetail ? "cursor-pointer hover:bg-slate-50 transition-colors" : ""} ${isSelf ? "bg-primary/5" : ""}`}
+                onClick={showDetail ? () => navigate(`/dashboard/users/${m.id}`) : undefined}>
+                <td className="px-3 py-2">
+                  <span className={isSelf ? "font-bold text-primary" : "font-medium text-slate-900"}>
+                    {m.fullName}
+                    {isSelf && <span className="ml-1.5 text-[10px] font-medium text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded-full">saya</span>}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-slate-500 hidden sm:table-cell">{m.email}</td>
+                <td className="px-3 py-2">
+                  <Badge variant={m.roleType === "ADMIN" ? "default" : m.roleType === "TREASURER" ? "secondary" : "outline"} className="text-[10px]">{m.roleType}</Badge>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function LoadingSkeletons() {
+  return <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>;
+}
+
+function EmptyState({ text, subtext }: { text: string; subtext?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/30">
+      <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+        <Building2 className="h-6 w-6 text-slate-400" />
+      </div>
+      <p className="text-sm font-medium text-slate-600">{text}</p>
+      {subtext && <p className="text-xs text-slate-400 mt-1">{subtext}</p>}
     </div>
   );
 }

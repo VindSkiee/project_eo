@@ -60,10 +60,11 @@ export class EventsRepository {
   // ==========================================
   // 2. FIND ALL (Untuk Warga / Resident)
   // ==========================================
-  async findAll(communityGroupId: number) {
+  async findAll(communityGroupIds: number | number[]) {
+    const ids = Array.isArray(communityGroupIds) ? communityGroupIds : [communityGroupIds];
     return this.prisma.event.findMany({
       where: {
-        communityGroupId,
+        communityGroupId: { in: ids },
         // Opsi: Jika DRAFT tidak boleh dilihat warga biasa, Anda bisa filter di sini
         // status: { not: EventStatus.DRAFT },
       },
