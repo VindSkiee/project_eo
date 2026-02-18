@@ -22,6 +22,49 @@ export class DuesService {
   }
 
   // ==========================================
+  // 1b. GET DUES CONFIG (Untuk Halaman Pengaturan)
+  // ==========================================
+  async getDuesConfig(user: ActiveUserData) {
+    const group = await this.duesRepo.findDuesConfigByGroupId(user.communityGroupId);
+    if (!group) {
+      throw new NotFoundException('Data lingkungan tidak ditemukan');
+    }
+
+    return {
+      group: {
+        id: group.id,
+        name: group.name,
+        type: group.type,
+      },
+      duesRule: group.duesRule
+        ? {
+            id: group.duesRule.id,
+            amount: Number(group.duesRule.amount),
+            dueDay: group.duesRule.dueDay,
+            isActive: group.duesRule.isActive,
+            updatedAt: group.duesRule.updatedAt,
+          }
+        : null,
+      children: group.children.map((child) => ({
+        group: {
+          id: child.id,
+          name: child.name,
+          type: child.type,
+        },
+        duesRule: child.duesRule
+          ? {
+              id: child.duesRule.id,
+              amount: Number(child.duesRule.amount),
+              dueDay: child.duesRule.dueDay,
+              isActive: child.duesRule.isActive,
+              updatedAt: child.duesRule.updatedAt,
+            }
+          : null,
+      })),
+    };
+  }
+
+  // ==========================================
   // 2. LIHAT TAGIHAN (Split Bill Calculation)
   // ==========================================
   async getMyBill(user: ActiveUserData) {

@@ -19,6 +19,7 @@ import PaymentPage from "@/features/payment/pages/PaymentPage";
 import OrganizationPage from "@/features/organization/pages/OrganizationPage";
 import ProfilePage from "@/features/profile/pages/ProfilePage";
 import UserDetailPage from "@/features/profile/pages/UserDetailPage";
+import DuesConfigPage from "@/features/finance/pages/DuesConfigPage";
 
 // --- 1. UTILITY FUNCTIONS ---
 const isAuthenticated = () => {
@@ -118,6 +119,10 @@ function App() {
                 {/* Hanya ADMIN (Ketua RT) yang bisa buka ini */}
                 <Route element={<RoleProtectedRoute allowedRoles={["ADMIN"]} />}>
                   <Route path="rt" element={<AdminDashboard />} />
+                  <Route path="kegiatan-rt" element={<EventsPage />} />
+                  <Route path="events-rt/:id" element={<EventDetailPage />} />
+                  <Route path="kas-rt" element={<FinancePage />} />
+                  <Route path="pembayaran-rt" element={<PaymentPage />} />
                 </Route>
 
                 {/* Hanya TREASURER (Bendahara) yang bisa buka ini */}
@@ -138,6 +143,11 @@ function App() {
                 {/* Detail User — Accessible by LEADER dan ADMIN */}
                 <Route element={<RoleProtectedRoute allowedRoles={["LEADER", "ADMIN"]} />}>
                   <Route path="users/:id" element={<UserDetailPage />} />
+                </Route>
+
+                {/* Pengaturan Iuran — LEADER dan ADMIN */}
+                <Route element={<RoleProtectedRoute allowedRoles={["LEADER", "ADMIN"]} />}>
+                  <Route path="pengaturan-iuran" element={<DuesConfigPage />} />
                 </Route>
 
                 {/* Warga dashboard */}

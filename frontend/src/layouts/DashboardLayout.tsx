@@ -81,7 +81,10 @@ export default function DashboardLayout() {
     } 
     else if (role === "ADMIN") {
       menu.push({ title: "Dashboard RT", path: "/dashboard/rt", icon: LayoutDashboard });
-      menu.push({ title: "Data Warga RT", path: "/dashboard/warga", icon: Users });
+      menu.push({ title: "Data Warga RT", path: "/dashboard/organisasi-rt", icon: Users });
+      menu.push({ title: "Kegiatan", path: "/dashboard/kegiatan-rt", icon: CalendarDays });
+      menu.push({ title: "Kas & Keuangan", path: "/dashboard/kas-rt", icon: Wallet });
+      menu.push({ title: "Pembayaran", path: "/dashboard/pembayaran-rt", icon: CreditCard });
     } 
     else if (role === "TREASURER") {
       menu.push({ title: "Dashboard Keuangan", path: "/dashboard/finance", icon: Wallet });

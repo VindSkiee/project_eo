@@ -80,3 +80,31 @@ export interface FundRequest {
   createdAt: string;
   updatedAt: string;
 }
+
+// Dues Rule
+export interface DuesRule {
+  id: number;
+  amount: number;
+  dueDay: number;
+  isActive: boolean;
+  updatedAt: string;
+}
+
+export interface GroupDuesInfo {
+  group: {
+    id: number;
+    name: string;
+    type: string;
+  };
+  duesRule: DuesRule | null;
+}
+
+export interface DuesConfig {
+  group: {
+    id: number;
+    name: string;
+    type: string;
+  };
+  duesRule: DuesRule | null;
+  children: GroupDuesInfo[];
+}

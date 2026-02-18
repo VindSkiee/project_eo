@@ -71,4 +71,22 @@ export class DuesRepository {
       data: { lastPaidPeriod: date }
     });
   }
+
+  // ==========================================
+  // 4. GET DUES CONFIG (Untuk Halaman Pengaturan)
+  // ==========================================
+  async findDuesConfigByGroupId(communityGroupId: number) {
+    return this.prisma.communityGroup.findUnique({
+      where: { id: communityGroupId },
+      include: {
+        duesRule: true,
+        children: {
+          include: {
+            duesRule: true,
+          },
+          orderBy: { name: 'asc' },
+        },
+      },
+    });
+  }
 }

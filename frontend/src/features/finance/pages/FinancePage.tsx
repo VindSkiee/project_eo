@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -26,6 +27,7 @@ import {
   Loader2,
   Banknote,
   TrendingUp,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
@@ -57,6 +59,7 @@ function formatDate(dateStr: string): string {
 }
 
 export default function FinancePage() {
+  const navigate = useNavigate();
   const [wallet, setWallet] = useState<WalletDetail | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [fundRequests, setFundRequests] = useState<FundRequest[]>([]);
@@ -151,13 +154,22 @@ export default function FinancePage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold font-poppins text-slate-900">
-          Kas & Keuangan
-        </h1>
-        <p className="text-sm sm:text-base text-slate-500 mt-1">
-          Kelola kas, transaksi, dan pengajuan dana.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold font-poppins text-slate-900">
+            Kas & Keuangan
+          </h1>
+          <p className="text-sm sm:text-base text-slate-500 mt-1">
+            Kelola kas, transaksi, dan pengajuan dana.
+          </p>
+        </div>
+        <Button
+          onClick={() => navigate("/dashboard/pengaturan-iuran")}
+          className="gap-2"
+        >
+          <Settings className="h-4 w-4" />
+          <span className="hidden sm:inline">Atur Pembayaran</span>
+        </Button>
       </div>
 
       {/* Wallet Card */}

@@ -76,6 +76,14 @@ export class FinanceController {
     return this.duesService.setDuesRule(dto, user);
   }
 
+  // B. Lihat Konfigurasi Iuran (Halaman Pengaturan)
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER, SystemRoleType.TREASURER)
+  @Get('dues/config')
+  @HttpCode(HttpStatus.OK)
+  async getDuesConfig(@ActiveUser() user: ActiveUserData) {
+    return this.duesService.getDuesConfig(user);
+  }
+
   @Roles(SystemRoleType.RESIDENT)
   @Get('dues/my-bill')
   @HttpCode(HttpStatus.OK)
