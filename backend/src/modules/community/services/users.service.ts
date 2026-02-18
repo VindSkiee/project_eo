@@ -1,9 +1,9 @@
-import { 
-  BadRequestException, 
-  ConflictException, 
-  Injectable, 
-  NotFoundException, 
-  ForbiddenException 
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  ForbiddenException
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { SystemRoleType, Prisma } from '@prisma/client';
@@ -24,8 +24,8 @@ import { ActiveUserData } from '@common/decorators/active-user.decorator';
 export class UsersService {
   constructor(
     private readonly usersRepository: UsersRepository,
-    private readonly prisma: PrismaService, 
-  ) {}
+    private readonly prisma: PrismaService,
+  ) { }
 
   /**
    * CREATE USER (Updated with Treasurer Validation)
@@ -40,7 +40,7 @@ export class UsersService {
     // 2. Logic Group & Security (Sama seperti sebelumnya)
     let targetGroupId = dto.communityGroupId;
     if (requester.roleType === SystemRoleType.ADMIN) {
-      targetGroupId = requester.communityGroupId; 
+      targetGroupId = requester.communityGroupId;
     } else if (requester.roleType === SystemRoleType.LEADER) {
       if (!targetGroupId) throw new BadRequestException('Group ID wajib diisi');
     }
@@ -68,7 +68,7 @@ export class UsersService {
       address: dto.address,
       role: { connect: { id: role.id } },
       communityGroup: { connect: { id: targetGroupId } },
-      createdBy: { connect: { id: requester.id } }, 
+      createdBy: { connect: { id: requester.id } },
     });
 
     return this.sanitizeUser(newUser);
@@ -90,7 +90,7 @@ export class UsersService {
       }
       // Admin RT juga tidak boleh memindahkan user ke RT lain (Group ID dikunci)
       if (dto.communityGroupId && dto.communityGroupId !== requester.communityGroupId) {
-         throw new ForbiddenException('Admin RT tidak boleh memindahkan warga ke RT lain');
+        throw new ForbiddenException('Admin RT tidak boleh memindahkan warga ke RT lain');
       }
     }
 
@@ -102,10 +102,10 @@ export class UsersService {
     // Kita cek apakah di tempat baru sudah ada bendahara?
     // Note: Kita exclude user ini sendiri dari hitungan (id not equals)
     if (targetRoleType === SystemRoleType.TREASURER) {
-       // Cek apakah role berubah ATAU group berubah?
-       if (dto.roleType || dto.communityGroupId) {
-          await this.validateTreasurerLimit(targetGroupId, targetRoleType as SystemRoleType, id);
-       }
+      // Cek apakah role berubah ATAU group berubah?
+      if (dto.roleType || dto.communityGroupId) {
+        await this.validateTreasurerLimit(targetGroupId, targetRoleType as SystemRoleType, id);
+      }
     }
 
     // 4. Siapkan Data Update
@@ -125,12 +125,12 @@ export class UsersService {
 
     // Jika ganti Group (Pindah RT)
     if (dto.communityGroupId) {
-       dataToUpdate.communityGroup = { connect: { id: dto.communityGroupId } };
+      dataToUpdate.communityGroup = { connect: { id: dto.communityGroupId } };
     }
 
     // Jika ganti Password (Optional)
     if (dto.password) {
-       dataToUpdate.password = await bcrypt.hash(dto.password, 10);
+      dataToUpdate.password = await bcrypt.hash(dto.password, 10);
     }
 
     const updatedUser = await this.usersRepository.update(id, dataToUpdate);
@@ -181,7 +181,7 @@ export class UsersService {
       (where.AND as any[]).push({
         communityGroupId: requester.communityGroupId,
       });
-    } 
+    }
     // Leader RW -> Bebas
 
     // 3. EKSEKUSI QUERY KE REPOSITORY
@@ -196,7 +196,7 @@ export class UsersService {
     const processedUsers = users.map((user) => {
       // --- LOGIC PRIVACY WALLET ---
       const userView = { ...user };
-      
+
       // Cek Permission lihat Wallet:
       const isRequesterRW = requester.roleType === SystemRoleType.LEADER;
       const isSameGroup = requester.communityGroupId === user.communityGroupId;
@@ -315,7 +315,7 @@ export class UsersService {
       role: { name: roleType }, // Mencari yang role-nya TREASURER
       isActive: true,
       // Jika excludeUserId ada (saat update), jangan hitung diri sendiri
-      id: excludeUserId ? { not: excludeUserId } : undefined, 
+      id: excludeUserId ? { not: excludeUserId } : undefined,
     });
 
     if (count > 0) {
@@ -337,5 +337,38 @@ export class UsersService {
     const { password, ...result } = user;
 
     return result;
+  }
+
+  async countByGroup(groupId: number, requester: ActiveUserData) {
+    const group = await this.prisma.communityGroup.findUnique({
+      where: { id: groupId },
+    });
+
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    switch (requester.roleType) {
+      case SystemRoleType.LEADER:
+      case SystemRoleType.TREASURER:
+        // boleh lihat RT di bawah RW miliknya
+        if (group.parentId !== requester.communityGroupId) {
+          throw new ForbiddenException('Access denied');
+        }
+        break;
+
+      case SystemRoleType.ADMIN:
+      case SystemRoleType.RESIDENT:
+        // hanya group sendiri
+        if (requester.communityGroupId !== groupId) {
+          throw new ForbiddenException('Access denied');
+        }
+        break;
+
+      default:
+        throw new ForbiddenException('Role not allowed');
+    }
+
+    return this.usersRepository.countByGroup(groupId);
   }
 }

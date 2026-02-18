@@ -12,12 +12,12 @@ import {
   CreditCard,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/button";
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
-} from "@/components/ui/sheet";
+} from "@/shared/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,10 +27,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+} from "@/shared/ui/alert-dialog";
+import { Avatar, AvatarFallback } from "@/shared/ui/avatar";
 import { toast } from "sonner";
-import { authService } from "@/services/authService";
+import { authService } from "@/features/auth/services/authService";
 
 // Tipe data user dari LocalStorage
 interface User {

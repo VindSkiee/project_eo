@@ -1,12 +1,13 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Patch, 
-  Param, 
-  Delete, 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
   Query,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { SystemRoleType } from '@prisma/client';
 
@@ -25,7 +26,7 @@ import type { ActiveUserData } from '@common/decorators/active-user.decorator';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   /**
    * =========================================
@@ -36,12 +37,12 @@ export class UsersController {
 
   @Get('me')
   async getMe(@ActiveUser() user: ActiveUserData) {
-    
+
     // Cek apakah sub ada? Atau malah tersimpan di property 'id'?
-    const userId = user.id; 
+    const userId = user.id;
 
     if (!userId) {
-        throw new Error(`User ID is undefined! Isi object user adalah: ${JSON.stringify(user)}`);
+      throw new Error(`User ID is undefined! Isi object user adalah: ${JSON.stringify(user)}`);
     }
 
     return this.usersService.getMyProfile(userId);
@@ -72,7 +73,7 @@ export class UsersController {
   @Post()
   @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
   create(
-    @ActiveUser() requester: ActiveUserData, 
+    @ActiveUser() requester: ActiveUserData,
     @Body() createUserDto: CreateUserDto
   ) {
     return this.usersService.create(requester, createUserDto);
@@ -105,7 +106,7 @@ export class UsersController {
 
   // 👇 INI YANG TADI MENANGKAP 'me'
   // Sekarang dia aman di bawah, hanya menangkap jika route di atas tidak cocok.
-  @Get(':id') 
+  @Get(':id')
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
   }
@@ -119,4 +120,15 @@ export class UsersController {
   ) {
     return this.usersService.update(id, updateUserDto, requester);
   }
+
+  @Get('groups/:groupId')
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
+  async countByGroup(
+    @Param('groupId', ParseIntPipe) groupId: number,
+    @ActiveUser() requester: ActiveUserData,
+  ) {
+    return this.usersService.countByGroup(groupId, requester);
+  }
+
+
 }

@@ -4,17 +4,17 @@ import { Prisma, User } from '@prisma/client';
 
 // 1. DEFINISI TYPE (Wajib ada Wallet di dalam CommunityGroup)
 export type UserWithRelations = Prisma.UserGetPayload<{
-  include: { 
-    role: true; 
+  include: {
+    role: true;
     communityGroup: {
       include: { wallet: true } // <--- Syarat utama
-    }; 
+    };
   };
 }>;
 
 @Injectable()
 export class UsersRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // --- REUSABLE INCLUDE OBJECT ---
   // Biar tidak capek ngetik berulang-ulang dan konsisten
@@ -107,4 +107,14 @@ export class UsersRepository {
       },
     });
   }
+  // Method lebih efisien untuk count single group
+  async countByGroup(groupId: number): Promise<number> {
+    return this.prisma.user.count({
+      where: {
+        communityGroupId: groupId,
+        isActive: true,
+      },
+    });
+  }
+
 }
