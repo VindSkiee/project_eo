@@ -377,4 +377,105 @@ export class FinanceService {
         : null,
     };
   }
+
+  // ==========================================
+  // 10. DUES PROGRESS (Progres Iuran Warga per Grup)
+  // ==========================================
+  async getDuesProgress(groupId: number, year: number, user: ActiveUserData) {
+    // Security: same as getGroupFinanceDetail
+    const userGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: user.communityGroupId },
+      select: { type: true, parentId: true },
+    });
+    const targetGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: groupId },
+      select: { parentId: true, name: true, type: true },
+    });
+
+    if (!userGroup || !targetGroup) throw new NotFoundException('Data lingkungan tidak ditemukan');
+
+    const isLeaderOfParent = userGroup.type === 'RW' && targetGroup.parentId === user.communityGroupId;
+    const isSibling = userGroup.parentId && userGroup.parentId === targetGroup.parentId;
+    const isOwnGroup = user.communityGroupId === groupId;
+
+    if (!isLeaderOfParent && !isSibling && !isOwnGroup) {
+      throw new ForbiddenException('Anda tidak memiliki akses ke data iuran lingkungan ini');
+    }
+
+    // Fetch group info + dues rule
+    const group = await this.prisma.communityGroup.findUnique({
+      where: { id: groupId },
+      include: {
+        duesRule: true,
+        parent: { select: { id: true, name: true, duesRule: { select: { amount: true, dueDay: true, isActive: true } } } },
+      },
+    });
+
+    // Fetch all RESIDENT users in this group with their lastPaidPeriod
+    const members = await this.prisma.user.findMany({
+      where: {
+        communityGroupId: groupId,
+        isActive: true,
+        role: { type: { in: ['RESIDENT', 'ADMIN', 'TREASURER'] } },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        createdAt: true,
+        lastPaidPeriod: true,
+        role: { select: { type: true } },
+      },
+      orderBy: { fullName: 'asc' },
+    });
+
+    // Fetch contributions for this year for all members in this group
+    const memberIds = members.map((m) => m.id);
+    const contributions = await this.prisma.contribution.findMany({
+      where: {
+        userId: { in: memberIds },
+        year: year,
+      },
+      select: {
+        userId: true,
+        month: true,
+        year: true,
+        amount: true,
+        paidAt: true,
+      },
+      orderBy: { month: 'asc' },
+    });
+
+    // Group contributions by userId
+    const contributionsByUser: Record<string, Array<{ month: number; year: number; amount: number; paidAt: Date }>> = {};
+    for (const c of contributions) {
+      if (!contributionsByUser[c.userId]) contributionsByUser[c.userId] = [];
+      contributionsByUser[c.userId].push({
+        month: c.month,
+        year: c.year,
+        amount: Number(c.amount),
+        paidAt: c.paidAt,
+      });
+    }
+
+    return {
+      group: { id: groupId, name: targetGroup.name, type: targetGroup.type },
+      year,
+      duesRule: group?.duesRule
+        ? { amount: Number(group.duesRule.amount), dueDay: group.duesRule.dueDay, isActive: group.duesRule.isActive }
+        : null,
+      parentDuesRule: group?.parent?.duesRule
+        ? { amount: Number(group.parent.duesRule.amount), dueDay: group.parent.duesRule.dueDay, isActive: group.parent.duesRule.isActive }
+        : null,
+      members: members.map((m) => ({
+        id: m.id,
+        fullName: m.fullName,
+        phone: m.phone,
+        roleType: m.role.type,
+        createdAt: m.createdAt,
+        lastPaidPeriod: m.lastPaidPeriod,
+        contributions: contributionsByUser[m.id] || [],
+      })),
+    };
+  }
 }

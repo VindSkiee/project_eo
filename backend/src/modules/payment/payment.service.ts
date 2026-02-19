@@ -343,7 +343,8 @@ export class PaymentService {
         await this.duesService.distributeContribution(
           updatedPayment.userId,
           Number(updatedPayment.amount),
-          tx // 👈 PASS TRANSACTION CLIENT KE SINI
+          tx, // 👈 PASS TRANSACTION CLIENT KE SINI
+          updatedPayment.id, // 👈 Link Contribution ke PaymentGatewayTx
         );
       }
 
@@ -357,9 +358,12 @@ export class PaymentService {
 
   // ==========================================
   // CREATE PAYMENT TOKEN (Bayar Iuran)
+  // months: 1-12 — jumlah bulan yang dibayar sekaligus
   // ==========================================
-  async createDuesPayment(user: ActiveUserData) {
-    // 0. CEK DUPLIKAT: Jangan buat transaksi baru jika masih ada PENDING
+  async createDuesPayment(user: ActiveUserData, months: number = 1) {
+    // Sanitasi: pastikan integer antara 1-12 meski frontend mengirim nilai aneh
+    const validMonths = Math.min(Math.max(Math.floor(months), 1), 12);
+    // 0. CEK DUPLIKAT PENDING TRANSAKSI
     const existingPending = await this.prisma.paymentGatewayTx.findFirst({
       where: {
         userId: user.id,
@@ -370,20 +374,47 @@ export class PaymentService {
     });
 
     if (existingPending) {
-      // Jika ada transaksi PENDING yang masih punya token, kembalikan token yang sama
-      if (existingPending.snapToken && existingPending.redirectUrl) {
-        return {
-          token: existingPending.snapToken,
-          redirect_url: existingPending.redirectUrl,
-          amount: Number(existingPending.amount),
-          breakdown: [], // Breakdown tidak disimpan, tapi client sudah punya dari getMyBill
-        };
+      try {
+        // 🛡️ SINKRONISASI REAL-TIME KE MIDTRANS
+        // Kita tanya langsung ke Midtrans apa status asli order ini sekarang
+        const midtransStatus = await this.snap.transaction.status(existingPending.orderId);
+        const txStatus = midtransStatus.transaction_status;
+
+        if (txStatus === 'pending') {
+          // Benar-benar masih bisa dibayar di Midtrans, berikan token lama
+          const bill = await this.duesService.getMyBill(user);
+          return {
+            token: existingPending.snapToken,
+            redirect_url: existingPending.redirectUrl,
+            amount: Number(existingPending.amount),
+            breakdown: bill.breakdown,
+          };
+        } else if (txStatus === 'settlement' || txStatus === 'capture') {
+          // Ternyata sudah sukses dibayar (mungkin webhook telat)
+          throw new BadRequestException('Tagihan Anda sudah lunas. Harap tunggu beberapa saat hingga sistem memperbarui status.');
+        } else {
+          // Status di Midtrans adalah 'expire', 'cancel', atau 'deny'
+          // Update database kita agar tidak nyangkut
+          await this.prisma.paymentGatewayTx.update({
+            where: { id: existingPending.id },
+            data: { status: txStatus === 'expire' ? 'EXPIRED' : 'FAILED' },
+          });
+          // Karena sudah di-update, biarkan logic berlanjut ke bawah untuk BIKIN BARU
+        }
+      } catch (error: any) {
+        // Jika Midtrans melempar error 404 (Not Found)
+        // Ini terjadi jika user buka popup Snap, tapi di-close sebelum pilih metode bayar (BCA/GoPay dll).
+        // Midtrans belum mencatatnya secara permanen. Kita anggap CANCELLED.
+        if (error.httpStatusCode === 404 || error.message?.includes('404')) {
+          await this.prisma.paymentGatewayTx.update({
+            where: { id: existingPending.id },
+            data: { status: 'CANCELLED' },
+          });
+          // Lanjut ke bawah bikin baru
+        } else {
+          throw new BadRequestException('Gagal mengecek status transaksi sebelumnya ke Midtrans.');
+        }
       }
-      // Jika PENDING tanpa token (edge case), batalkan dulu sebelum buat baru
-      await this.prisma.paymentGatewayTx.update({
-        where: { id: existingPending.id },
-        data: { status: 'CANCELLED' },
-      });
     }
 
     // 1. HITUNG TAGIHAN
@@ -393,54 +424,203 @@ export class PaymentService {
       throw new BadRequestException('Tidak ada tagihan iuran yang perlu dibayar saat ini.');
     }
 
-    // 2. GENERATE ORDER ID
-    const orderId = `DUES-${user.id}-${Date.now()}`;
+    // 2. GENERATE ORDER ID BARU (Versi Pendek agar tidak error Midtrans)
+    const shortUserId = user.id.split('-')[0]; 
+    const orderId = `DUES-${shortUserId}-${Date.now()}`;
 
-    // 3. 👇 TAMBAHAN PENTING: SIMPAN DRAFT KE DB DULU!
-    // Kita pakai repo yang sama seperti createTransaction
+    // 3. PENTING: Pastikan semua amount adalah integer, dan kalikan dengan bulan
+    const grossAmount = Math.round(bill.totalAmount * validMonths);
+    const itemDetails = bill.breakdown.map((item) => ({
+      id: `ITEM-${item.type}`,
+      price: Math.round(item.amount * validMonths),
+      quantity: 1,
+      name: `${item.groupName.substring(0, 38)} (${validMonths} bln)`,
+    }));
+
+    const itemTotal = itemDetails.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    if (itemTotal !== grossAmount) {
+      itemDetails[0].price += (grossAmount - itemTotal);
+    }
+
+    // 4. SIMPAN DRAFT KE DB
     await this.paymentRepo.createTransaction({
       orderId: orderId,
       userId: user.id,
-      amount: bill.totalAmount,
-      grossAmount: bill.totalAmount,
-      // Bisa tambah field metadata/description kalau perlu
+      amount: grossAmount,
+      grossAmount: grossAmount,
     });
 
-    // 4. SIAPKAN PARAMETER MIDTRANS
+    // 5. SIAPKAN PARAMETER MIDTRANS
     const parameter = {
       transaction_details: {
         order_id: orderId,
-        gross_amount: bill.totalAmount,
+        gross_amount: grossAmount,
       },
-      item_details: bill.breakdown.map((item) => ({
-        id: `ITEM-${item.type}`,
-        price: item.amount,
-        quantity: 1,
-        name: item.groupName,
-      })),
+      item_details: itemDetails,
       customer_details: {
-        first_name: user.email,
+        first_name: user.fullName || user.email?.split('@')[0] || 'Warga',
         email: user.email,
       },
+      enabled_payments: [
+        'other_qris', 'gopay', 'shopeepay', 'bca_va', 
+        'bni_va', 'bri_va', 'permata_va', 'cimb_va',
+      ],
       custom_field1: user.id,
+      // 👇 TAMBAHAN BARU: CUSTOM EXPIRY TIME
+      // Memaksa transaksi ini akan mati otomatis dalam 24 jam di sistem Midtrans
+      custom_expiry: {
+        expiry_duration: 24, // Bisa diganti 1 jika ingin 1 jam mati
+        unit: 'hour'         // Pilihan: 'minute', 'hour', 'day'
+      }
     };
 
-    // 5. MINTA TOKEN
+    // 6. MINTA TOKEN
+    const appUrl = this.configService.get<string>('APP_URL') || this.configService.get<string>('app.url');
+    if (appUrl) {
+      (parameter as any).callbacks = {
+        finish: `${appUrl}/dashboard/pembayaran-warga`,
+      };
+      (parameter as any).notification_url = `${appUrl}/api/payment/notification`;
+      this.logger.log(`Notification URL set to: ${appUrl}/api/payment/notification`);
+    } else {
+      this.logger.warn('APP_URL env not set — Midtrans webhook will not fire automatically. Use /api/payment/sync/:orderId to manually update status.');
+    }
+
     try {
+      this.logger.log(`Creating Midtrans transaction: ${orderId}, amount: ${grossAmount}`);
       const transaction = await this.snap.createTransaction(parameter);
 
-      // 6. 👇 UPDATE TOKEN KE DB (Agar sinkron)
       await this.paymentRepo.updateSnapData(orderId, transaction.token, transaction.redirect_url);
 
       return {
         token: transaction.token,
         redirect_url: transaction.redirect_url,
-        amount: bill.totalAmount,
+        amount: grossAmount,
         breakdown: bill.breakdown
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Midtrans CreateTransaction Error for ${orderId}:`, error);
+      const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
       throw new BadRequestException('Gagal membuat transaksi pembayaran: ' + errorMessage);
     }
+  }
+
+  // ==========================================
+  // SYNC STATUS FROM MIDTRANS (Manual Polling)
+  // Digunakan saat webhook tidak bisa diterima (development/localhost)
+  // ==========================================
+  async syncPaymentFromMidtrans(orderId: string, user: ActiveUserData) {
+    // 1. Pastikan transaksi ada di DB milik user ini
+    const existingTx = await this.prisma.paymentGatewayTx.findUnique({
+      where: { orderId },
+    });
+    if (!existingTx) throw new NotFoundException('Transaksi tidak ditemukan');
+    this.checkAccess(existingTx.userId, user);
+
+    // 2. Jika sudah PAID, tidak perlu sync
+    if (existingTx.status === PaymentGatewayStatus.PAID) {
+      return { message: 'Transaksi sudah berstatus PAID', status: 'PAID', updated: false };
+    }
+
+    // 3. Tanya Midtrans langsung via Core API
+    let midtransData: any;
+    try {
+      midtransData = await this.coreApi.transaction.status(orderId);
+      this.logger.log(`[SYNC] Midtrans status for ${orderId}: ${midtransData.transaction_status}`);
+    } catch (error: any) {
+      const statusCode = error?.httpStatusCode || error?.ApiResponse?.status_code;
+      if (statusCode === 404 || String(statusCode) === '404') {
+        throw new BadRequestException('Transaksi belum tercatat di Midtrans. Mungkin belum ada metode pembayaran yang dipilih.');
+      }
+      this.logger.error(`[SYNC] Midtrans API error for ${orderId}:`, error);
+      throw new BadRequestException('Gagal mengambil status dari Midtrans: ' + (error?.message || 'unknown error'));
+    }
+
+    // 4. Map status Midtrans ke enum kita
+    const transactionStatus = midtransData.transaction_status;
+    const fraudStatus = midtransData.fraud_status;
+    const paymentType = midtransData.payment_type;
+
+    let finalStatus: PaymentGatewayStatus;
+    if (transactionStatus === 'capture') {
+      finalStatus = fraudStatus === 'challenge' ? PaymentGatewayStatus.PENDING : PaymentGatewayStatus.PAID;
+    } else if (transactionStatus === 'settlement') {
+      finalStatus = PaymentGatewayStatus.PAID;
+    } else if (transactionStatus === 'cancel') {
+      finalStatus = PaymentGatewayStatus.CANCELLED;
+    } else if (transactionStatus === 'deny' || transactionStatus === 'failure') {
+      finalStatus = PaymentGatewayStatus.FAILED;
+    } else if (transactionStatus === 'expire') {
+      finalStatus = PaymentGatewayStatus.EXPIRED;
+    } else {
+      // 'pending' or anything else
+      finalStatus = PaymentGatewayStatus.PENDING;
+    }
+
+    // 5. Jika masih PENDING, tidak ada yang perlu diubah
+    if (finalStatus === PaymentGatewayStatus.PENDING && existingTx.status === PaymentGatewayStatus.PENDING) {
+      return {
+        message: 'Pembayaran masih menunggu penyelesaian di Midtrans',
+        status: 'PENDING',
+        midtransStatus: transactionStatus,
+        updated: false,
+      };
+    }
+
+    // 6. Map kategori & provider
+    let category: PaymentMethodCategory = PaymentMethodCategory.VIRTUAL_ACCOUNT;
+    if (['gopay', 'shopeepay', 'qris', 'other_qris'].includes(paymentType)) {
+      category = PaymentMethodCategory.E_WALLET;
+    } else if (paymentType === 'credit_card') {
+      category = PaymentMethodCategory.CREDIT_CARD;
+    } else if (paymentType === 'cstore') {
+      category = PaymentMethodCategory.CONVENIENCE_STORE;
+    }
+
+    let providerCode = paymentType;
+    let vaNumber: string | undefined = undefined;
+    if (midtransData.va_numbers?.[0]) {
+      providerCode = midtransData.va_numbers[0].bank;
+      vaNumber = midtransData.va_numbers[0].va_number;
+    } else if (midtransData.bca_va_number) {
+      providerCode = 'bca';
+      vaNumber = midtransData.bca_va_number;
+    }
+
+    // 7. Update DB + distribute if PAID — atomically
+    return await this.prisma.$transaction(async (tx) => {
+      const updatedPayment = await tx.paymentGatewayTx.update({
+        where: { orderId },
+        data: {
+          status: finalStatus,
+          midtransId: midtransData.transaction_id,
+          methodCategory: category,
+          providerCode,
+          vaNumber,
+          rawResponse: midtransData,
+          paidAt: finalStatus === PaymentGatewayStatus.PAID ? new Date() : null,
+        },
+      });
+
+      if (finalStatus === PaymentGatewayStatus.PAID) {
+        this.logger.log(`[SYNC] Payment confirmed PAID for ${orderId}. Distributing funds...`);
+        await this.duesService.distributeContribution(
+          updatedPayment.userId,
+          Number(updatedPayment.amount),
+          tx,
+          updatedPayment.id, // 👈 Link Contribution ke PaymentGatewayTx
+        );
+      }
+
+      this.logger.log(`[SYNC] Updated ${orderId}: ${existingTx.status} → ${finalStatus}`);
+      return {
+        message: `Status berhasil diperbarui ke ${finalStatus}`,
+        status: finalStatus,
+        updated: true,
+      };
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      timeout: 20000,
+    });
   }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
     Card,
     CardContent,
@@ -30,10 +30,20 @@ import {
 
 export default function EventsPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [events, setEvents] = useState<EventItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [activeTab, setActiveTab] = useState("semua");
+
+    // Resolve event detail path based on current route
+    const getEventDetailPath = (id: string) => {
+        const path = location.pathname;
+        if (path.includes("kegiatan-bendahara")) return `/dashboard/events-bendahara/${id}`;
+        if (path.includes("kegiatan-rt")) return `/dashboard/events-rt/${id}`;
+        if (path.includes("kegiatan-warga")) return `/dashboard/events-warga/${id}`;
+        return `/dashboard/events/${id}`;
+    };
 
     // Approval Dialog
     const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
@@ -200,9 +210,11 @@ export default function EventsPage() {
                         Kelola seluruh kegiatan dan acara lingkungan.
                     </p>
                 </div>
-                <Button onClick={() => setShowCreateDialog(true)} className="shrink-0">
-                    <Plus className="h-4 w-4 mr-1" /> Buat Acara Baru
-                </Button>
+                {(() => { try { const u = localStorage.getItem("user"); if (u && JSON.parse(u).role === "TREASURER") return null; } catch {} return (
+                  <Button onClick={() => setShowCreateDialog(true)} className="shrink-0">
+                      <Plus className="h-4 w-4 mr-1" /> Buat Acara Baru
+                  </Button>
+                ); })()}
             </div>
 
             {/* Summary Cards */}
@@ -275,7 +287,7 @@ export default function EventsPage() {
                         events={filteredEvents}
                         loading={loading}
                         searchQuery={search}
-                        onEventClick={(id) => navigate(`/dashboard/events/${id}`)}
+                        onEventClick={(id) => navigate(getEventDetailPath(id))}
                         onEdit={openEditDialog}
                         onDelete={handleDeleteEvent}
                         onApprove={(event) => openApprovalDialog(event, "approve")}

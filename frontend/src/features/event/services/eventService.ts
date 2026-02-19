@@ -61,4 +61,14 @@ export const eventService = {
   cancelWithReason: async (id: string, reason: string): Promise<void> => {
     await api.post(`/events/${id}/cancel`, { reason });
   },
+
+  /** Submit event for approval */
+  submit: async (id: string): Promise<void> => {
+    await api.post(`/events/${id}/submit`);
+  },
+
+  /** Submit expense (TREASURER only) */
+  submitExpense: async (id: string, data: { title: string; amount: number; proofImage?: string }): Promise<void> => {
+    await api.post(`/events/${id}/expenses`, data);
+  },
 };

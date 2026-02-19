@@ -47,6 +47,10 @@ export interface MyBill {
   currency: string;
   breakdown: BillBreakdown[];
   dueDateDescription: string;
+  /** Bulan pertama yang belum dibayar (1=Jan ... 12=Des) */
+  nextBillMonth: number;
+  /** Tahun dari bulan pertama yang belum dibayar */
+  nextBillYear: number;
 }
 
 export interface Contribution {
@@ -193,4 +197,31 @@ export interface HierarchyData {
     treasurer: HierarchyOfficer | null;
   };
   rtGroups: HierarchyRtGroup[];
+}
+
+// === Dues Progress (for TREASURER dues tracking) ===
+
+export interface DuesProgressContribution {
+  month: number;
+  year: number;
+  amount: number;
+  paidAt: string;
+}
+
+export interface DuesProgressMember {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  roleType: string;
+  createdAt: string;
+  lastPaidPeriod: string | null;
+  contributions: DuesProgressContribution[];
+}
+
+export interface DuesProgressData {
+  group: { id: number; name: string; type: string };
+  year: number;
+  duesRule: { amount: number; dueDay: number; isActive: boolean } | null;
+  parentDuesRule: { amount: number; dueDay: number; isActive: boolean } | null;
+  members: DuesProgressMember[];
 }

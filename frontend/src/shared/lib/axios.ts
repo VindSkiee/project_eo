@@ -12,8 +12,8 @@ export const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Jika backend menolak (Token Expired / Tidak Valid / Role dipalsukan)
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    // Hanya redirect jika token expired/tidak valid (401), bukan 403 (forbidden resource)
+    if (error.response?.status === 401) {
       localStorage.removeItem('user'); // Hapus flag login
       window.location.href = '/login'; // Tendang ke halaman login
     }

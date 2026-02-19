@@ -73,23 +73,25 @@ export default function DashboardLayout() {
     const menu = [];
 
     if (role === "LEADER") {
-      menu.push({ title: "Dashboard RW", path: "/dashboard/rw", icon: LayoutDashboard });
+      menu.push({ title: "Dashboard", path: "/dashboard/rw", icon: LayoutDashboard });
       menu.push({ title: "Organisasi", path: "/dashboard/organisasi", icon: Building2 });
       menu.push({ title: "Kegiatan", path: "/dashboard/kegiatan", icon: CalendarDays });
       menu.push({ title: "Kas & Keuangan", path: "/dashboard/kas", icon: Wallet });
       menu.push({ title: "Pembayaran", path: "/dashboard/pembayaran", icon: CreditCard });
     } 
     else if (role === "ADMIN") {
-      menu.push({ title: "Dashboard RT", path: "/dashboard/rt", icon: LayoutDashboard });
+      menu.push({ title: "Dashboard", path: "/dashboard/rt", icon: LayoutDashboard });
       menu.push({ title: "Data Warga RT", path: "/dashboard/organisasi-rt", icon: Users });
       menu.push({ title: "Kegiatan", path: "/dashboard/kegiatan-rt", icon: CalendarDays });
       menu.push({ title: "Kas & Keuangan", path: "/dashboard/kas-rt", icon: Wallet });
       menu.push({ title: "Pembayaran", path: "/dashboard/pembayaran-rt", icon: CreditCard });
     } 
     else if (role === "TREASURER") {
-      menu.push({ title: "Dashboard Keuangan", path: "/dashboard/finance", icon: Wallet });
+      menu.push({ title: "Dashboard", path: "/dashboard/finance", icon: Wallet });
       menu.push({ title: "Organisasi", path: "/dashboard/organisasi-bendahara", icon: Building2 });
       menu.push({ title: "Kegiatan", path: "/dashboard/kegiatan-bendahara", icon: CalendarDays });
+      menu.push({ title: "Kas & Keuangan", path: "/dashboard/kas-bendahara", icon: Wallet });
+      menu.push({ title: "Pembayaran", path: "/dashboard/pembayaran-bendahara", icon: CreditCard });
     } 
     else {
       // Default / RESIDENT
@@ -185,7 +187,16 @@ export default function DashboardLayout() {
   );
 
   return (
-    <div className="flex min-h-screen w-full font-sans bg-slate-50">
+    <div
+      className="flex min-h-screen w-full font-sans"
+      style={{
+        backgroundImage: "url('/images/background_page10.png')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
       
       {/* --- SIDEBAR (DESKTOP) --- */}
       <aside className={`hidden md:flex shrink-0 p-3 z-20 transition-all duration-300 ${isCollapsed ? 'w-[100px]' : 'w-[280px]'}`}>

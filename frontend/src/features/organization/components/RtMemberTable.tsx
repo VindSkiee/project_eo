@@ -91,7 +91,7 @@ export function RtMemberTable({
                 <tr
                   key={member.id}
                   onClick={() => onMemberClick(member.id)}
-                  className={`group hover:bg-slate-50/80 transition-all duration-200 cursor-pointer ${isSelf ? "bg-primary/5" : ""}`}
+                  className="group hover:bg-slate-50/80 transition-all duration-200 cursor-pointer"
                 >
                   <td className="px-4 py-3 whitespace-nowrap text-left">
                     <div className="flex items-center gap-2">
@@ -103,7 +103,7 @@ export function RtMemberTable({
                       <div className="min-w-0">
                         <p className={`transition-colors ${isSelf ? "font-bold text-primary" : "font-medium text-slate-700 group-hover:text-slate-900"}`}>
                           {member.fullName}
-                          {isSelf && <span className="ml-1.5 text-[10px] font-medium text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded-full">saya</span>}
+                          {isSelf && <span className="ml-1.5 text-[10px] font-semibold bg-brand-green text-white px-1.5 py-0.5 rounded-full">saya</span>}
                         </p>
                       </div>
                     </div>

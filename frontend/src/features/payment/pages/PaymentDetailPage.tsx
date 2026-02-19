@@ -22,6 +22,7 @@ import {
   Wallet,
   User,
   ShieldCheck,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { paymentService } from "@/features/payment/services/paymentService";
@@ -155,6 +156,7 @@ export default function PaymentDetailPage() {
   const [payment, setPayment] = useState<PaymentItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const fetchPayment = useCallback(async () => {
     if (!id) return;
@@ -175,6 +177,26 @@ export default function PaymentDetailPage() {
   useEffect(() => {
     fetchPayment();
   }, [fetchPayment]);
+
+  const handleSyncStatus = async () => {
+    if (!payment?.orderId) return;
+    setSyncing(true);
+    try {
+      const result = await paymentService.syncPayment(payment.orderId);
+      if (result.updated) {
+        toast.success(`Status diperbarui: ${result.status}`);
+        await fetchPayment(); // Reload data terbaru
+      } else {
+        toast.info(result.message || "Pembayaran masih pending di Midtrans.");
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err instanceof Error ? err.message : "Gagal mengecek status");
+      toast.error(msg);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -416,27 +438,41 @@ export default function PaymentDetailPage() {
       </Card>
 
       {/* Action Button — Resume payment if PENDING */}
-      {payment.status === "PENDING" && payment.redirectUrl && (
+      {payment.status === "PENDING" && (
         <Card className={`${status.border} ${status.bg}`}>
-          <CardContent className="py-4 px-5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="flex items-start gap-2.5">
-                <Clock className={`h-5 w-5 ${status.color} mt-0.5 shrink-0`} />
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Selesaikan Pembayaran</p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Klik tombol di bawah untuk melanjutkan pembayaran.
-                  </p>
-                </div>
+          <CardContent className="py-4 px-5 space-y-3">
+            <div className="flex items-start gap-2.5">
+              <Clock className={`h-5 w-5 ${status.color} mt-0.5 shrink-0`} />
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Selesaikan Pembayaran</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Sudah bayar tapi status masih pending? Klik "Cek Status" untuk memperbarui.
+                </p>
               </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              {/* Sync / Cek Status button — polls Midtrans directly */}
               <Button
+                variant="outline"
                 size="sm"
-                className="bg-amber-600 hover:bg-amber-700 text-white shrink-0"
-                onClick={() => window.open(payment.redirectUrl!, "_blank")}
+                className="border-amber-400 text-amber-700 hover:bg-amber-50"
+                onClick={handleSyncStatus}
+                disabled={syncing}
               >
-                <ExternalLink className="h-4 w-4 mr-1" />
-                Lanjutkan Bayar
+                <RefreshCw className={`h-4 w-4 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "Mengecek..." : "Cek Status Pembayaran"}
               </Button>
+              {/* Resume payment button */}
+              {payment.redirectUrl && (
+                <Button
+                  size="sm"
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                  onClick={() => window.open(payment.redirectUrl!, "_blank")}
+                >
+                  <ExternalLink className="h-4 w-4 mr-1" />
+                  Lanjutkan Bayar
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

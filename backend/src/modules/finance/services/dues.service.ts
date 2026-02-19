@@ -68,8 +68,14 @@ export class DuesService {
   // 2. LIHAT TAGIHAN (Split Bill Calculation)
   // ==========================================
   async getMyBill(user: ActiveUserData) {
-    // Ambil data hierarki dari Repo
-    const groupData = await this.duesRepo.findGroupHierarchyWithRules(user.communityGroupId);
+    // Ambil data hierarki dari Repo + lastPaidPeriod user secara paralel
+    const [groupData, userRecord] = await Promise.all([
+      this.duesRepo.findGroupHierarchyWithRules(user.communityGroupId),
+      this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: { lastPaidPeriod: true },
+      }),
+    ]);
 
     if (!groupData) throw new NotFoundException('Data lingkungan tidak ditemukan');
 
@@ -100,11 +106,27 @@ export class DuesService {
       });
     }
 
+    // C. Hitung bulan tagihan pertama (untuk tampilan selektor bulan di frontend)
+    const now = new Date();
+    let nextBillMonth: number;
+    let nextBillYear: number;
+    if (userRecord?.lastPaidPeriod) {
+      const lp = new Date(userRecord.lastPaidPeriod);
+      nextBillMonth = lp.getMonth() + 2; // 0-indexed → 1-indexed, +1 = bulan berikutnya
+      nextBillYear  = lp.getFullYear();
+      if (nextBillMonth > 12) { nextBillMonth = 1; nextBillYear += 1; }
+    } else {
+      nextBillMonth = now.getMonth() + 1; // 0-indexed → 1-indexed
+      nextBillYear  = now.getFullYear();
+    }
+
     return {
       totalAmount,
       currency: 'IDR',
       breakdown,
-      dueDateDescription: `Setiap tanggal ${groupData.duesRule?.dueDay || 10} bulan berjalan`
+      dueDateDescription: `Setiap tanggal ${groupData.duesRule?.dueDay || 10} bulan berjalan`,
+      nextBillMonth,
+      nextBillYear,
     };
   }
 
@@ -118,7 +140,8 @@ export class DuesService {
   async distributeContribution(
     userId: string,
     totalPaid: number,
-    tx?: Prisma.TransactionClient // 👈 Parameter Transaksi Opsional
+    tx?: Prisma.TransactionClient, // 👈 Parameter Transaksi Opsional
+    paymentGatewayTxId?: string,  // 👈 ID PaymentGatewayTx untuk Contribution linking
   ) {
     // Gunakan Transaction Client jika ada, jika tidak pakai default Prisma Service
     const prismaClient = tx || this.prisma;
@@ -207,19 +230,63 @@ export class DuesService {
       });
     }
 
-    // 5. UPDATE PERIODE PEMBAYARAN USER (Write)
+    // 5. CATAT CONTRIBUTION & UPDATE PERIODE PEMBAYARAN USER (Write)
     if (monthsPaid > 0) {
-      // Tentukan start date: Jika null, mulai dari createdAt. Jika ada, mulai dari lastPaidPeriod.
-      let newPaidPeriod = user.lastPaidPeriod 
-        ? new Date(user.lastPaidPeriod) 
-        : new Date(user.createdAt);
+      // Tentukan bulan pertama yang dibayarkan:
+      // - Jika belum pernah bayar (null): bayar untuk bulan berjalan saat ini
+      // - Jika sudah pernah bayar: bayar untuk bulan berikutnya setelah lastPaidPeriod
+      const now = new Date();
+      let startMonth: number; // 1-indexed (1=Jan, 12=Dec)
+      let startYear: number;
 
-      // Tambahkan jumlah bulan yang dibayar
-      newPaidPeriod.setMonth(newPaidPeriod.getMonth() + monthsPaid);
+      if (user.lastPaidPeriod) {
+        const lp = new Date(user.lastPaidPeriod);
+        // getMonth() is 0-indexed → +1 for 1-indexed, +1 for "bulan berikutnya"
+        startMonth = lp.getMonth() + 2;
+        startYear = lp.getFullYear();
+        if (startMonth > 12) { startMonth = 1; startYear += 1; }
+      } else {
+        // Belum pernah bayar → bayarkan untuk bulan berjalan
+        startMonth = now.getMonth() + 1; // 0-indexed → 1-indexed
+        startYear  = now.getFullYear();
+      }
+
+      // Catat Contribution per bulan yang dibayarkan
+      for (let i = 0; i < monthsPaid; i++) {
+        let contribMonth = startMonth + i;
+        let contribYear  = startYear;
+        while (contribMonth > 12) { contribMonth -= 12; contribYear += 1; }
+
+        // Idempotency: jangan catat dua kali untuk bulan yang sama
+        const existing = await prismaClient.contribution.findFirst({
+          where: { userId: user.id, month: contribMonth, year: contribYear },
+        });
+
+        if (!existing) {
+          await prismaClient.contribution.create({
+            data: {
+              userId:   user.id,
+              amount:   monthlyTotal,
+              month:    contribMonth,
+              year:     contribYear,
+              paidAt:   now,
+              // Hubungkan ke PaymentGatewayTx hanya untuk bulan pertama (unique constraint)
+              ...(i === 0 && paymentGatewayTxId ? { paymentGatewayTxId } : {}),
+            },
+          });
+        }
+      }
+
+      // Update lastPaidPeriod ke hari terakhir bulan terakhir yang dibayar
+      let lastMonth = startMonth + monthsPaid - 1;
+      let lastYear  = startYear;
+      while (lastMonth > 12) { lastMonth -= 12; lastYear += 1; }
+      // new Date(year, month, 0) → hari terakhir bulan month (1-indexed) pada year
+      const newPaidPeriod = new Date(lastYear, lastMonth, 0);
 
       await prismaClient.user.update({
         where: { id: user.id },
-        data: { lastPaidPeriod: newPaidPeriod }
+        data:  { lastPaidPeriod: newPaidPeriod },
       });
     }
   }

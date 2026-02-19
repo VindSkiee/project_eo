@@ -19,6 +19,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import {
   Wallet,
@@ -28,15 +35,20 @@ import {
   Banknote,
   TrendingUp,
   Settings,
+  Plus,
+  Users,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
 import { fundRequestService } from "@/features/finance/services/fundRequestService";
+import { eventService } from "@/features/event/services/eventService";
 import type {
   WalletDetail,
   Transaction,
   FundRequest,
   ChildWalletInfo,
+  EventItem,
 } from "@/shared/types";
 import { TransactionTable, FundRequestTable, ChildrenWalletsSection } from "@/features/finance/components";
 
@@ -79,7 +91,9 @@ export default function FinancePage() {
     return null;
   })();
 
-  const showChildrenWallets = userRole === "LEADER" || userRole === "ADMIN";
+  const showChildrenWallets = userRole === "LEADER" || userRole === "ADMIN" || userRole === "TREASURER";
+  const canCreateTransaction = userRole === "TREASURER" || userRole === "LEADER";
+  const canCreateFundRequest = userRole === "TREASURER" || userRole === "ADMIN";
 
   // Reject Dialog
   const [selectedFR, setSelectedFR] = useState<FundRequest | null>(null);
@@ -87,10 +101,40 @@ export default function FinancePage() {
   const [rejectDecision, setRejectDecision] = useState("CONTINUE_WITH_ORIGINAL");
   const [submitting, setSubmitting] = useState(false);
 
+  // Manual Transaction Dialog
+  const [showTxDialog, setShowTxDialog] = useState(false);
+  const [txType, setTxType] = useState<"CREDIT" | "DEBIT">("CREDIT");
+  const [txAmount, setTxAmount] = useState("");
+  const [txDescription, setTxDescription] = useState("");
+  const [txSubmitting, setTxSubmitting] = useState(false);
+
+  // Fund Request Dialog
+  const [showFRDialog, setShowFRDialog] = useState(false);
+  const [frAmount, setFrAmount] = useState("");
+  const [frDescription, setFrDescription] = useState("");
+  const [frEventId, setFrEventId] = useState("");
+  const [frSubmitting, setFrSubmitting] = useState(false);
+  const [events, setEvents] = useState<EventItem[]>([]);
+
+  // Role-aware paths
+  const showDuesConfig = userRole !== "TREASURER";
+  const duesConfigPath = userRole === "ADMIN" ? "/dashboard/pengaturan-iuran" : "/dashboard/pengaturan-iuran";
+  const childrenBasePath = userRole === "TREASURER" ? "/dashboard/progres-iuran-bendahara"
+    : userRole === "ADMIN" ? "/dashboard/keuangan-rt" : "/dashboard/keuangan-rt";
+  const isChildTreasurer = userRole === "TREASURER" && wallet?.communityGroup?.type === "RT";
+
   useEffect(() => {
     fetchData();
     if (showChildrenWallets) fetchChildrenWallets();
+    if (canCreateFundRequest) fetchEvents();
   }, []);
+
+  const fetchEvents = async () => {
+    try {
+      const data = await eventService.getAll();
+      setEvents(data);
+    } catch { /* non-critical */ }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -178,6 +222,71 @@ export default function FinancePage() {
     }
   };
 
+  // === Handle Create Manual Transaction ===
+  const handleCreateTransaction = async () => {
+    const amount = Number(txAmount);
+    if (!amount || amount < 1000) {
+      toast.error("Jumlah minimal Rp 1.000.");
+      return;
+    }
+    if (!txDescription.trim()) {
+      toast.error("Deskripsi wajib diisi.");
+      return;
+    }
+    setTxSubmitting(true);
+    try {
+      await financeService.createTransaction({
+        type: txType,
+        amount,
+        description: txDescription,
+      });
+      toast.success("Transaksi berhasil dicatat!");
+      setShowTxDialog(false);
+      setTxAmount("");
+      setTxDescription("");
+      fetchData();
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(message || "Gagal mencatat transaksi.");
+    } finally {
+      setTxSubmitting(false);
+    }
+  };
+
+  // === Handle Create Fund Request ===
+  const handleCreateFR = async () => {
+    const amount = Number(frAmount);
+    if (!amount || amount < 1) {
+      toast.error("Jumlah harus lebih dari 0.");
+      return;
+    }
+    if (!frDescription.trim()) {
+      toast.error("Deskripsi wajib diisi.");
+      return;
+    }
+    setFrSubmitting(true);
+    try {
+      await fundRequestService.create({
+        amount,
+        description: frDescription,
+        eventId: frEventId || undefined,
+      });
+      toast.success("Pengajuan dana berhasil dibuat!");
+      setShowFRDialog(false);
+      setFrAmount("");
+      setFrDescription("");
+      setFrEventId("");
+      fetchData();
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(message || "Gagal mengajukan dana.");
+    } finally {
+      setFrSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
@@ -190,13 +299,27 @@ export default function FinancePage() {
             Kelola kas, transaksi, dan pengajuan dana.
           </p>
         </div>
-        <Button
-          onClick={() => navigate("/dashboard/pengaturan-iuran")}
-          className="gap-2"
-        >
-          <Settings className="h-4 w-4" />
-          <span className="hidden sm:inline">Atur Pembayaran</span>
-        </Button>
+        <div className="flex gap-2">
+          {canCreateTransaction && (
+            <Button
+              variant="outline"
+              onClick={() => setShowTxDialog(true)}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Catat Transaksi</span>
+            </Button>
+          )}
+          {showDuesConfig && (
+            <Button
+              onClick={() => navigate(duesConfigPath)}
+              className="gap-2"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">Atur Pembayaran</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Wallet Card */}
@@ -266,12 +389,31 @@ export default function FinancePage() {
         </Card>
       </div>
 
-      {/* Children Wallets — visible for LEADER / ADMIN */}
+      {/* Dues Progress Quick Access — Child TREASURER only */}
+      {isChildTreasurer && wallet && (
+        <Card
+          className="cursor-pointer border-primary/20 hover:border-primary/50 hover:shadow-md transition-all"
+          onClick={() => navigate(`/dashboard/progres-iuran-bendahara/${wallet.communityGroup.id}`)}
+        >
+          <CardContent className="flex items-center gap-4 py-5">
+            <div className="rounded-xl bg-primary/10 p-3">
+              <Users className="h-6 w-6 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-slate-900 font-poppins">Progres Iuran Warga</p>
+              <p className="text-sm text-slate-500">Lihat progres pembayaran kas {wallet.communityGroup.name}</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-slate-400" />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Children Wallets — visible for LEADER / ADMIN / TREASURER */}
       {showChildrenWallets && (
         <ChildrenWalletsSection
           wallets={childrenWallets}
           loading={loadingChildren}
-          basePath="/dashboard/keuangan-rt"
+          basePath={childrenBasePath}
         />
       )}
 
@@ -322,14 +464,21 @@ export default function FinancePage() {
 
         {/* === TAB: Pengajuan Dana === */}
         <TabsContent value="pengajuan" className="space-y-4">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Cari pengajuan..."
-              value={searchFR}
-              onChange={(e) => setSearchFR(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Cari pengajuan..."
+                value={searchFR}
+                onChange={(e) => setSearchFR(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            {canCreateFundRequest && (
+              <Button onClick={() => setShowFRDialog(true)} className="gap-2 shrink-0">
+                <Plus className="h-4 w-4" /> Ajukan Dana
+              </Button>
+            )}
           </div>
 
           {loading ? (
@@ -439,6 +588,124 @@ export default function FinancePage() {
             >
               {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
               Tolak Pengajuan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* === Manual Transaction Dialog === */}
+      <Dialog open={showTxDialog} onOpenChange={setShowTxDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-poppins">Catat Transaksi Manual</DialogTitle>
+            <DialogDescription>
+              Tambahkan pencatatan pemasukan atau pengeluaran kas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Tipe Transaksi *</Label>
+              <Select value={txType} onValueChange={(v) => setTxType(v as "CREDIT" | "DEBIT")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CREDIT">Pemasukan (CREDIT)</SelectItem>
+                  <SelectItem value="DEBIT">Pengeluaran (DEBIT)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tx-amount">Jumlah (min Rp 1.000) *</Label>
+              <Input
+                id="tx-amount"
+                type="number"
+                placeholder="Contoh: 50000"
+                value={txAmount}
+                onChange={(e) => setTxAmount(e.target.value)}
+                min={1000}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tx-desc">Deskripsi *</Label>
+              <Textarea
+                id="tx-desc"
+                placeholder="Jelaskan transaksi ini..."
+                value={txDescription}
+                onChange={(e) => setTxDescription(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTxDialog(false)}>
+              Batal
+            </Button>
+            <Button onClick={handleCreateTransaction} disabled={txSubmitting}>
+              {txSubmitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Simpan Transaksi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* === Create Fund Request Dialog === */}
+      <Dialog open={showFRDialog} onOpenChange={setShowFRDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-poppins">Ajukan Dana</DialogTitle>
+            <DialogDescription>
+              Buat pengajuan dana dari RT ke RW.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="fr-amount">Jumlah (Rp) *</Label>
+              <Input
+                id="fr-amount"
+                type="number"
+                placeholder="Contoh: 500000"
+                value={frAmount}
+                onChange={(e) => setFrAmount(e.target.value)}
+                min={1}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fr-desc">Deskripsi *</Label>
+              <Textarea
+                id="fr-desc"
+                placeholder="Jelaskan keperluan pengajuan dana..."
+                value={frDescription}
+                onChange={(e) => setFrDescription(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Kegiatan Terkait (opsional)</Label>
+              <Select value={frEventId} onValueChange={setFrEventId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih kegiatan (opsional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Tidak Ada</SelectItem>
+                  {events
+                    .filter((e) => e.status === "APPROVED" || e.status === "FUNDED" || e.status === "ONGOING")
+                    .map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.title}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowFRDialog(false)}>
+              Batal
+            </Button>
+            <Button onClick={handleCreateFR} disabled={frSubmitting}>
+              {frSubmitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Ajukan
             </Button>
           </DialogFooter>
         </DialogContent>

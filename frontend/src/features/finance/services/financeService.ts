@@ -1,6 +1,6 @@
 // Finance and wallet-related API operations
 import { api } from "@/shared/lib/axios";
-import type { ApiResponse, TransparencyBalance, MyBill, WalletDetail, Transaction, DuesConfig, DuesRule, ChildrenWalletsData, GroupFinanceDetail, TransactionDetail } from "@/shared/types";
+import type { ApiResponse, TransparencyBalance, MyBill, WalletDetail, Transaction, DuesConfig, DuesRule, ChildrenWalletsData, GroupFinanceDetail, TransactionDetail, DuesProgressData } from "@/shared/types";
 
 export const financeService = {
   /** Get RT & RW wallet balance (transparency endpoint) */
@@ -72,6 +72,14 @@ export const financeService = {
   /** Get single transaction detail */
   getTransactionDetail: async (id: number): Promise<TransactionDetail> => {
     const response = await api.get<ApiResponse<TransactionDetail>>(`/finance/transactions/${id}`);
+    return response.data.data;
+  },
+
+  /** Get dues payment progress for a specific group */
+  getDuesProgress: async (groupId: number, year?: number): Promise<DuesProgressData> => {
+    const response = await api.get<ApiResponse<DuesProgressData>>(`/finance/groups/${groupId}/dues-progress`, {
+      params: year ? { year } : {},
+    });
     return response.data.data;
   },
 };

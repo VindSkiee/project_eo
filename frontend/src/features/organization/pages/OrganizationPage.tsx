@@ -201,7 +201,7 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
                 const isLoadingThisRT = loadingMembers === group.id;
                 return (
                   <Collapsible key={group.id} open={isExpanded} onOpenChange={() => toggleRT(group.id)}>
-                    <Card className="overflow-hidden border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                    <Card className="group overflow-hidden border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
                       <CollapsibleTrigger asChild>
                         <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50/80 transition-colors">
                           <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -212,7 +212,7 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
-                            <Badge variant="secondary" className="text-xs font-medium bg-slate-100 text-slate-600 border-0 mr-1">{group.type}</Badge>
+                            <Badge variant="secondary" className="text-xs font-medium bg-slate-100 text-slate-600 border-0 mr-1 transition-colors group-hover:bg-primary group-hover:text-white">{group.type}</Badge>
                             <button onClick={(e) => { e.stopPropagation(); openEditGroup(group); }} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-blue-500 transition-all" title="Edit RT"><Pencil className="h-3.5 w-3.5" /></button>
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id, group.name); }} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-rose-500 transition-all" title="Hapus RT"><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>
@@ -268,10 +268,21 @@ function TreasurerView({ navigate, userGroupId }: { navigate: ReturnType<typeof 
 
   const fetchData = async () => {
     setLoading(true);
-    try { const data = await groupService.getHierarchy(); setHierarchy(data); }
+    try {
+      const data = await groupService.getHierarchy();
+      setHierarchy(data);
+      if (userGroupId) setExpandedRT(userGroupId);
+    }
     catch { toast.error("Gagal memuat data organisasi."); }
     finally { setLoading(false); }
   };
+
+  // Auto-fetch own RT/RW members when hierarchy is loaded
+  useEffect(() => {
+    if (userGroupId && !rtMembers[userGroupId] && hierarchy) {
+      fetchRTMembers(userGroupId);
+    }
+  }, [hierarchy, userGroupId]);
 
   const fetchRTMembers = useCallback(async (groupId: number) => {
     if (rtMembers[groupId]) return;
@@ -410,15 +421,15 @@ function AdminView({ navigate, userGroupId }: { navigate: ReturnType<typeof useN
             const isLoadingThisRT = loadingMembers === rt.id;
             return (
               <Collapsible key={rt.id} open={isExpanded} onOpenChange={() => toggleRT(rt.id)}>
-                <Card className={`overflow-hidden transition-shadow ${isOwn ? "border-primary/40 shadow-md ring-1 ring-primary/20" : "border-slate-100 shadow-sm hover:shadow-md"}`}>
+                <Card className={`group overflow-hidden transition-shadow ${isOwn ? "border-primary/40 shadow-md ring-1 ring-primary/20" : "border-slate-100 shadow-sm hover:shadow-md"}`}>
                   <CollapsibleTrigger asChild>
                     <div className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${isOwn ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-slate-50/80"}`}>
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"} ${isOwn ? "text-primary" : "text-slate-400"}`} />
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2">
                             <p className={`font-medium text-sm sm:text-base ${isOwn ? "text-primary" : "text-slate-900"}`}>{rt.name}</p>
-                            {isOwn && <Badge variant="default" className="text-[10px]">RT Anda</Badge>}
+                            {isOwn && <Badge variant="default" className="text-[10px] bg-slate-100 text-slate-700 transition-colors group-hover:bg-primary group-hover:text-white">RT Anda</Badge>}
                           </div>
                           <p className="text-xs text-slate-500">{rt.memberCount} warga</p>
                         </div>
@@ -476,9 +487,11 @@ function ResidentView({ navigate, userGroupId }: { navigate: ReturnType<typeof u
     finally { setLoading(false); }
   };
 
-  // Auto-fetch own RT members after hierarchy loads
+  // Auto-fetch own RT members when hierarchy is loaded
   useEffect(() => {
-    if (userGroupId && !rtMembers[userGroupId] && hierarchy) fetchRTMembersById(userGroupId);
+    if (userGroupId && !rtMembers[userGroupId] && hierarchy) {
+      fetchRTMembersById(userGroupId);
+    }
   }, [hierarchy, userGroupId]);
 
   const fetchRTMembersById = useCallback(async (groupId: number) => {
@@ -488,7 +501,11 @@ function ResidentView({ navigate, userGroupId }: { navigate: ReturnType<typeof u
       const res = await userService.getFiltered({ communityGroupId: groupId, limit: 100 });
       const usersArray = Array.isArray(res) ? res : (res?.data || []);
       setRtMembers((prev) => ({ ...prev, [groupId]: usersArray }));
-    } catch { toast.error("Gagal memuat anggota RT."); }
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status !== 403) toast.error("Gagal memuat anggota RT.");
+      setRtMembers((prev) => ({ ...prev, [groupId]: [] }));
+    }
     finally { setLoadingMembers(null); }
   }, [rtMembers]);
 
@@ -525,15 +542,15 @@ function ResidentView({ navigate, userGroupId }: { navigate: ReturnType<typeof u
               const isLoadingThisRT = loadingMembers === rt.id;
               return (
                 <Collapsible key={rt.id} open={isExpanded} onOpenChange={() => toggleRT(rt.id)}>
-                  <Card className={`overflow-hidden transition-shadow ${isOwn ? "border-primary/40 shadow-md ring-1 ring-primary/20" : "border-slate-100 shadow-sm hover:shadow-md"}`}>
+                  <Card className={`group overflow-hidden transition-shadow ${isOwn ? "border-slate-100 shadow-sm hover:shadow-md hover:border-primary/40 transition-all duration-400"  : "border-slate-100 shadow-sm hover:shadow-md"}`}>
                     <CollapsibleTrigger asChild>
-                      <div className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${isOwn ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-slate-50/80"}`}>
+                      <div className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${isOwn ? "hover:bg-slate-50/80" : "hover:bg-slate-50/80"}`}>
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"} ${isOwn ? "text-primary" : "text-slate-400"}`} />
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2">
                               <p className={`font-medium text-sm sm:text-base ${isOwn ? "text-primary" : "text-slate-900"}`}>{rt.name}</p>
-                              {isOwn && <Badge variant="default" className="text-[10px]">RT Anda</Badge>}
+                              {isOwn && <Badge variant="default" className="text-[10px] bg-slate-100 text-slate-700 transition-colors duration-400 group-hover:bg-primary group-hover:text-white">RT Anda</Badge>}
                             </div>
                             <p className="text-xs text-slate-500">{rt.memberCount} warga</p>
                           </div>
@@ -636,6 +653,16 @@ function OfficerBadge({ label, officer, clickable, onClick }: {
   );
 }
 
+const roleLabel = (role: string) => {
+  switch (role) {
+    case "LEADER": return "Ketua RW";
+    case "ADMIN": return "Ketua RT";
+    case "TREASURER": return "Bendahara";
+    case "RESIDENT": return "Warga";
+    default: return role || "Warga";
+  }
+};
+
 function ReadOnlyMemberTable({ members, loading, navigate, showDetail, currentUserId }: {
   members: UserItem[];
   loading: boolean;
@@ -652,39 +679,107 @@ function ReadOnlyMemberTable({ members, loading, navigate, showDetail, currentUs
   };
   const sorted = [...members].sort((a, b) => getPriority(a) - getPriority(b));
 
-  if (loading) return <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}</div>;
-  if (members.length === 0) return <p className="text-sm text-slate-400 text-center py-4">Belum ada anggota.</p>;
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
+      </div>
+    );
+  }
+
+  if (members.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 px-4">
+        <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+          <Users className="h-5 w-5 text-slate-400" />
+        </div>
+        <p className="text-xs font-medium text-slate-500">Belum ada anggota</p>
+        <p className="text-xs text-slate-400 mt-1">Anggota akan muncul di sini</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-slate-200">
-            <th className="text-left text-xs font-medium text-slate-500 px-3 py-2">Nama</th>
-            <th className="text-left text-xs font-medium text-slate-500 px-3 py-2 hidden sm:table-cell">Email</th>
-            <th className="text-left text-xs font-medium text-slate-500 px-3 py-2">Role</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((m) => {
-            const isSelf = !!(currentUserId && m.id === currentUserId);
-            return (
-              <tr key={m.id} className={`border-b border-slate-50 ${showDetail ? "cursor-pointer hover:bg-slate-50 transition-colors" : ""} ${isSelf ? "bg-primary/5" : ""}`}
-                onClick={showDetail ? () => navigate(`/dashboard/users/${m.id}`) : undefined}>
-                <td className="px-3 py-2">
-                  <span className={isSelf ? "font-bold text-primary" : "font-medium text-slate-900"}>
-                    {m.fullName}
-                    {isSelf && <span className="ml-1.5 text-[10px] font-medium text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded-full">saya</span>}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-slate-500 hidden sm:table-cell">{m.email}</td>
-                <td className="px-3 py-2">
-                  <Badge variant={m.roleType === "ADMIN" ? "default" : m.roleType === "TREASURER" ? "secondary" : "outline"} className="text-[10px]">{m.roleType}</Badge>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="bg-white rounded-lg border border-slate-100 overflow-hidden shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-50/50">
+              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider w-10">
+                No
+              </th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Nama
+              </th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider hidden sm:table-cell">
+                Email
+              </th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Role
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {sorted.map((m, idx) => {
+              const isSelf = !!(currentUserId && m.id === currentUserId);
+              const roleType = m.roleType || m.role?.type || "RESIDENT";
+              return (
+                <tr
+                  key={m.id}
+                  onClick={showDetail ? () => navigate(`/dashboard/users/${m.id}`) : undefined}
+                  className={`group hover:bg-slate-50/80 transition-all duration-200 ${showDetail ? "cursor-pointer" : ""}`}
+                >
+                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                    <span className="text-xs text-slate-400 font-mono">
+                      {(idx + 1).toString().padStart(2, "0")}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-left">
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 bg-gradient-to-br from-slate-100 to-slate-200">
+                        <span className="text-xs font-medium text-slate-600">
+                          {m.fullName?.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-700 group-hover:text-slate-900 transition-colors">
+                          {m.fullName}
+                          {isSelf && (
+                            <span className="ml-1.5 text-[10px] font-semibold bg-brand-green text-white px-1.5 py-0.5 rounded-full">
+                              saya
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-center text-slate-500 hidden sm:table-cell">
+                    {m.email}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                    <span
+                      className={`
+                        inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                        ${
+                          roleType === "LEADER"
+                            ? "bg-indigo-50 text-indigo-700"
+                            : roleType === "ADMIN"
+                            ? "bg-blue-50 text-blue-700"
+                            : roleType === "TREASURER"
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-slate-50 text-slate-600"
+                        }
+                      `}
+                    >
+                      {roleLabel(roleType)}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -24,6 +24,7 @@ import UserDetailPage from "@/features/profile/pages/UserDetailPage";
 import DuesConfigPage from "@/features/finance/pages/DuesConfigPage";
 import GroupFinanceDetailPage from "@/features/finance/pages/GroupFinanceDetailPage";
 import TransactionDetailPage from "@/features/finance/pages/TransactionDetailPage";
+import GroupDuesProgressPage from "@/features/finance/pages/GroupDuesProgressPage";
 
 // --- 1. UTILITY FUNCTIONS ---
 const isAuthenticated = () => {
@@ -139,7 +140,11 @@ function App() {
                   <Route path="organisasi-bendahara" element={<OrganizationPage />} />
                   <Route path="kegiatan-bendahara" element={<EventsPage />} />
                   <Route path="events-bendahara/:id" element={<EventDetailPage />} />
+                  <Route path="kas-bendahara" element={<FinancePage />} />
+                  <Route path="pembayaran-bendahara" element={<PaymentPage />} />
                   <Route path="transaksi-bendahara/:id" element={<TransactionDetailPage />} />
+                  <Route path="keuangan-rt-bendahara/:groupId" element={<GroupFinanceDetailPage />} />
+                  <Route path="progres-iuran-bendahara/:groupId" element={<GroupDuesProgressPage />} />
                 </Route>
 
                 {/* LEADER boleh buka halaman organisasi */}

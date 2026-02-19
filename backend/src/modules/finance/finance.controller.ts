@@ -121,6 +121,22 @@ export class FinanceController {
   }
 
   // ==========================================
+  // 5b. DUES PROGRESS PER GROUP (Progres Iuran Warga)
+  // ==========================================
+
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)
+  @Get('groups/:groupId/dues-progress')
+  @HttpCode(HttpStatus.OK)
+  async getDuesProgress(
+    @Param('groupId', ParseIntPipe) groupId: number,
+    @Query('year') year: string,
+    @ActiveUser() user: ActiveUserData,
+  ) {
+    const targetYear = year ? parseInt(year, 10) : new Date().getFullYear();
+    return this.financeService.getDuesProgress(groupId, targetYear, user);
+  }
+
+  // ==========================================
   // 6. TRANSACTION DETAIL
   // ==========================================
 

@@ -80,7 +80,7 @@ export class UsersController {
   }
 
   @Get()
-  @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER, SystemRoleType.TREASURER, SystemRoleType.RESIDENT)
   findAll(
     @ActiveUser() requester: ActiveUserData,
     @Query() filterDto: UserFilterDto

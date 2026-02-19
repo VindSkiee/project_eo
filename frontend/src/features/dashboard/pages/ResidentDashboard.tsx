@@ -19,11 +19,14 @@ import {
   CheckCircle2,
   Megaphone,
   PartyPopper,
+  Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
 import { eventService } from "@/features/event/services/eventService";
-import type { TransparencyBalance, MyBill, EventItem } from "@/shared/types";
+import { paymentService } from "@/features/payment/services/paymentService";
+import type { TransparencyBalance, MyBill, EventItem, PaymentItem } from "@/shared/types";
 
 function formatRupiah(amount: number): string {
   return new Intl.NumberFormat("id-ID", {
@@ -58,6 +61,7 @@ export default function ResidentDashboard() {
   const [balance, setBalance] = useState<TransparencyBalance | null>(null);
   const [bill, setBill] = useState<MyBill | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [pendingPayments, setPendingPayments] = useState<PaymentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
 
@@ -84,15 +88,22 @@ export default function ResidentDashboard() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [balanceData, billData, eventsData] = await Promise.allSettled([
+        const [balanceData, billData, eventsData, paymentsData] = await Promise.allSettled([
           financeService.getTransparencyBalance(),
           financeService.getMyBill(),
           eventService.getAll(),
+          paymentService.getHistory(),
         ]);
 
         if (balanceData.status === "fulfilled") setBalance(balanceData.value);
         if (billData.status === "fulfilled") setBill(billData.value);
         if (eventsData.status === "fulfilled") setEvents(eventsData.value);
+        if (paymentsData.status === "fulfilled") {
+          const pending = paymentsData.value.filter(
+            (p: PaymentItem) => p.status === "PENDING" && p.orderId.startsWith("DUES-")
+          );
+          setPendingPayments(pending);
+        }
       } catch {
         toast.error("Terjadi kesalahan saat memuat data dashboard.");
       } finally {
@@ -147,6 +158,47 @@ export default function ResidentDashboard() {
           Selamat datang di portal informasi warga.
         </p>
       </div>
+
+      {/* === PENDING PAYMENT REMINDER === */}
+      {!loading && pendingPayments.length > 0 && (
+        <Card className="border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 overflow-hidden shadow-md animate-in slide-in-from-top duration-500">
+          <CardContent className="p-0">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-5 sm:p-6">
+              <div className="h-12 w-12 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                <AlertTriangle className="h-6 w-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-800 font-poppins">
+                  Pembayaran Menunggu Penyelesaian
+                </p>
+                <p className="text-xs text-amber-600 mt-1">
+                  Anda memiliki {pendingPayments.length} pembayaran iuran yang belum diselesaikan.
+                  Segera selesaikan agar iuran tercatat.
+                </p>
+                <div className="mt-2 space-y-1">
+                  {pendingPayments.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between text-xs">
+                      <span className="text-amber-700 flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {p.orderId.length > 30 ? p.orderId.substring(0, 30) + "..." : p.orderId}
+                      </span>
+                      <span className="font-semibold text-amber-800">{formatRupiah(Number(p.amount))}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <Button
+                className="bg-amber-600 hover:bg-amber-700 text-white shadow-lg shadow-amber-200 shrink-0 w-full sm:w-auto"
+                onClick={() => navigate("/dashboard/pembayaran-warga")}
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
+                Bayar Sekarang
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* === TAGIHAN IURAN (Prominent) === */}
       {loading ? (

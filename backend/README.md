@@ -266,11 +266,13 @@ backend/
 
 | Method | Endpoint | Description | Auth Required | Roles |
 |--------|----------|-------------|---------------|-------|
-| `POST` | `/` | Create new user | ✅ | ADMIN, LEADER |
+| `GET` | `/me` | Get my profile | ✅ | All authenticated |
 | `GET` | `/` | Get all users (filtered by group) | ✅ | ADMIN, LEADER |
 | `GET` | `/:id` | Get user by ID | ✅ | All authenticated |
+| `POST` | `/` | Create new user | ✅ | ADMIN, LEADER |
 | `PATCH` | `/:id` | Update user (admin) | ✅ | ADMIN, LEADER |
 | `DELETE` | `/:id` | Soft delete user | ✅ | ADMIN, LEADER |
+| `GET` | `/groups/:groupId` | Count users by group | ✅ | ADMIN, LEADER |
 | `PATCH` | `/profile` | Update own profile | ✅ | All authenticated |
 | `PATCH` | `/change-password` | Change own password | ✅ | All authenticated |
 
@@ -331,6 +333,7 @@ Note: All fields are optional
 
 | Method | Endpoint | Description | Auth Required | Roles |
 |--------|----------|-------------|---------------|-------|
+| `GET` | `/hierarchy` | Get organization hierarchy with officers | ✅ | All authenticated |
 | `POST` | `/` | Create new group | ✅ | LEADER |
 | `GET` | `/` | Get all groups | ✅ | All authenticated |
 | `GET` | `/:id` | Get group by ID | ✅ | All authenticated |
@@ -510,9 +513,13 @@ Note: rwDecision can be "CANCEL_EVENT" or "CONTINUE_WITH_ORIGINAL"
 |--------|----------|-------------|---------------|-------|
 | `GET` | `/wallet` | Get wallet details | ✅ | ADMIN, TREASURER, LEADER |
 | `GET` | `/transactions` | Get transaction history | ✅ | ADMIN, TREASURER, LEADER |
+| `GET` | `/transactions/:id` | Get transaction details | ✅ | ADMIN, TREASURER, LEADER |
 | `POST` | `/transactions` | Create manual transaction | ✅ | TREASURER, LEADER |
+| `GET` | `/children-wallets` | Get all child wallets (RW view) | ✅ | ADMIN, TREASURER, LEADER |
+| `GET` | `/groups/:groupId/detail` | Get group finance detail | ✅ | ADMIN, TREASURER, LEADER |
 | `POST` | `/dues/config` | Set dues amount | ✅ | ADMIN, TREASURER, LEADER |
-| `GET` | `/dues/my-bill` | Get my monthly bill | ✅ | RESIDENT (all users) |
+| `GET` | `/dues/config` | Get dues configuration | ✅ | ADMIN, TREASURER, LEADER |
+| `GET` | `/dues/my-bill` | Get my monthly bill | ✅ | All authenticated |
 | `GET` | `/transparency/balance` | Public balance view | ✅ | All authenticated |
 | `GET` | `/transparency/history` | Public transaction history | ✅ | All authenticated |
 
@@ -537,6 +544,13 @@ Note: type can be "CREDIT" (income) or "DEBIT" (expense). contributorUserId is o
 }
 ```
 Note: dueDay is the day of month (1-31) when dues are due
+
+**Query Parameters**:
+
+**GET `/transparency/history`** - Optional parameter
+- `scope`: Filter by scope - "RT" (default) or "RW"
+
+Example: `GET /transparency/history?scope=RW`
 
 **Key Features**:
 - Wallet per group (RT/RW)
@@ -568,7 +582,7 @@ Note: dueDay is the day of month (1-31) when dues are due
 | `POST` | `/cancel/:orderId` | Cancel transaction | ✅ | All authenticated |
 | `POST` | `/refund` | Request refund | ✅ | RESIDENT |
 | `GET` | `/all-transactions` | Get all transactions (admin) | ✅ | ADMIN, TREASURER, LEADER |
-| `POST` | `/refund/:refundId/process` | Process refund | ✅ | ADMIN, TREASURER, LEADER |
+| `POST` | `/refund/:refundId/process` | Process refund request | ✅ | ADMIN, TREASURER, LEADER |
 | `POST` | `/notification` | Webhook from Midtrans | ❌ | Public (webhook) |
 
 **Request Bodies**:

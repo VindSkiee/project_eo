@@ -1,11 +1,8 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
 } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -25,9 +22,7 @@ import {
   CreditCard,
   Search,
   Receipt,
-  ArrowLeft,
   Wallet,
-  AlertCircle,
   CheckCircle2,
   Clock,
   XCircle,
@@ -35,6 +30,10 @@ import {
   ShieldCheck,
   ArrowRight,
   FileText,
+  AlertTriangle,
+  QrCode,
+  RefreshCw,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
@@ -50,14 +49,6 @@ function formatRupiah(amount: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
 }
 
 function formatDateTime(dateStr: string): string {
@@ -97,6 +88,17 @@ function getMethodLabel(method?: string): string {
   };
   return labels[method || ""] || method || "-";
 }
+
+// === CONSTANTS ===
+
+const MONTH_NAMES_ID = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+const MONTH_SHORT_ID = [
+  "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+  "Jul", "Agu", "Sep", "Okt", "Nov", "Des",
+];
 
 // === Midtrans Snap Loader ===
 
@@ -150,8 +152,10 @@ export default function ResidentPaymentPage() {
   const [loading, setLoading] = useState(true);
   const [loadingPayments, setLoadingPayments] = useState(true);
   const [paying, setPaying] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [selectedMonthCount, setSelectedMonthCount] = useState(1);
   const payingRef = useRef(false); // Prevent double-click
 
   const fetchBill = useCallback(async () => {
@@ -187,6 +191,68 @@ export default function ResidentPaymentPage() {
     loadMidtransSnap().catch(() => {});
   }, [fetchBill, fetchPayments]);
 
+  // Reset month selection whenever bill data changes
+  useEffect(() => {
+    setSelectedMonthCount(1);
+  }, [bill?.nextBillMonth, bill?.nextBillYear]);
+
+  // Daftar bulan Jan–Des tahun tagihan — capped ke Desember (tidak melewati tahun ini)
+  const monthGrid = useMemo(() => {
+    const startMonth = bill?.nextBillMonth ?? (new Date().getMonth() + 1);
+    const year       = bill?.nextBillYear  ?? new Date().getFullYear();
+    // Jumlah bulan yang bisa dipilih maksimal sampai Desember
+    const maxSelectable = 12 - startMonth + 1; // 1 = hanya bulan ini, dst.
+    return {
+      months: Array.from({ length: 12 }, (_, i) => {
+        const m      = i + 1; // 1-12
+        const offset = m - startMonth; // <0=paid, 0=locked, >0=selectable
+        const state  = offset < 0 ? "paid" : offset === 0 ? "locked" : "selectable";
+        const isChecked = state !== "paid" && offset < selectedMonthCount;
+        return { month: m, year, label: MONTH_NAMES_ID[i], short: MONTH_SHORT_ID[i], state, offset, isChecked };
+      }),
+      maxSelectable,
+      startMonth,
+      year,
+    };
+  }, [bill?.nextBillMonth, bill?.nextBillYear, selectedMonthCount]);
+
+  // Toggle bulan — hanya dalam tahun berjalan (maks Desember)
+  const handleMonthToggle = (m: number) => {
+    const startMonth = monthGrid.startMonth;
+    if (m < startMonth) return; // paid — locked
+    if (m === startMonth) return; // wajib — locked
+    const offset = m - startMonth; // 1+
+    // Cegah memilih melebihi Desember
+    if (offset >= monthGrid.maxSelectable) return;
+    if (offset < selectedMonthCount) {
+      setSelectedMonthCount(offset);     // uncheck ini dan ke atas
+    } else {
+      setSelectedMonthCount(offset + 1); // check sampai bulan ini
+    }
+  };
+
+  // === SYNC PENDING PAYMENT FROM MIDTRANS ===
+  const handleSyncPending = async () => {
+    if (!pendingPayment) return;
+    setSyncing(true);
+    try {
+      const result = await paymentService.syncPayment(pendingPayment.orderId);
+      if (result.updated) {
+        toast.success(`Status diperbarui: ${result.status}`);
+        await Promise.allSettled([fetchBill(), fetchPayments()]);
+      } else {
+        toast.info(result.message || "Pembayaran masih pending di Midtrans. Silakan selesaikan pembayaran terlebih dahulu.");
+      }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (err instanceof Error ? err.message : "Gagal mengecek status");
+      toast.error(msg);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // === PAYMENT HANDLER ===
   const handlePayDues = async () => {
     setShowConfirmDialog(false);
@@ -201,7 +267,7 @@ export default function ResidentPaymentPage() {
       await loadMidtransSnap();
 
       // 2. Create payment on backend
-      const result = await paymentService.payDues();
+      const result = await paymentService.payDues(selectedMonthCount);
 
       if (!result.token) {
         throw new Error("Token pembayaran tidak diterima");
@@ -238,7 +304,8 @@ export default function ResidentPaymentPage() {
   };
 
   const hasUnpaidBill = bill !== null && bill.totalAmount > 0;
-  const hasPendingPayment = payments.some((p) => p.status === "PENDING");
+  const pendingPayment = payments.find((p) => p.status === "PENDING" && p.orderId.startsWith("DUES-"));
+  const hasPendingPayment = !!pendingPayment;
   const paidCount = payments.filter((p) => p.status === "PAID").length;
   const totalPaid = payments.filter((p) => p.status === "PAID").reduce((s, p) => s + Number(p.amount), 0);
 
@@ -258,49 +325,181 @@ export default function ResidentPaymentPage() {
             Kelola iuran dan lihat riwayat pembayaran Anda.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => navigate("/dashboard/warga")}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Kembali
-        </Button>
       </div>
 
       {/* === INVOICE / TAGIHAN SECTION === */}
       {loading ? (
         <Skeleton className="h-52 w-full rounded-xl" />
       ) : hasUnpaidBill ? (
-        <Card className="overflow-hidden border-0 shadow-lg">
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 text-white p-6 sm:p-8">
+        <Card className="rounded-xl shadow-sm bg-slate-100 border border-black">
+          <div className="bg-slate-100 p-6 sm:p-8">
             <div className="flex items-center gap-2 mb-4">
-              <Receipt className="h-5 w-5 text-slate-300" />
-              <p className="text-sm font-medium text-slate-300 uppercase tracking-wide">Nota Tagihan Iuran</p>
+              <p className="text-sm sm:text-base font-semibold text-slate-700 uppercase tracking-wide">Nota Tagihan Iuran</p>
             </div>
 
-            {/* Invoice Detail */}
-            <div className="bg-white/10 rounded-xl p-4 sm:p-5 backdrop-blur-sm border border-white/10 mb-5">
+            {/* Invoice Detail — per-month base amounts */}
+            <div className="bg-slate-200 rounded-lg p-4 sm:p-5 border border-slate-100 mb-4">
+              <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-3">Rincian iuran / bulan</p>
               <div className="space-y-3">
                 {bill?.breakdown.map((item, idx) => (
                   <div key={idx} className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-white">Iuran {item.type}</p>
-                      <p className="text-xs text-slate-400">{item.groupName}</p>
+                      <p className="text-sm sm:text-base font-medium text-slate-700">Iuran {item.type}</p>
+                      <p className="text-xs sm:text-sm text-slate-400">{item.groupName}</p>
                     </div>
-                    <p className="text-lg font-bold text-white font-poppins">{formatRupiah(item.amount)}</p>
+                    <p className="text-base sm:text-lg font-semibold text-slate-900 font-poppins">{formatRupiah(item.amount)}</p>
                   </div>
                 ))}
               </div>
-              <div className="border-t border-white/20 mt-4 pt-4 flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-300">Total Tagihan</p>
-                <p className="text-2xl sm:text-3xl font-bold text-white font-poppins">{formatRupiah(bill?.totalAmount || 0)}</p>
-              </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-400 mb-5">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              <span>{bill?.dueDateDescription} &middot; Pembayaran aman via Midtrans</span>
+            {/* Month Selector — only when no pending transaction */}
+            {!hasPendingPayment && (
+              <div className="bg-slate-200 border border-slate-100 rounded-lg p-4 mb-4">
+                <div className="flex items-center justify-center mb-7 mt-7">
+                  <p className="text-sm text-center font-semibold text-slate-700 uppercase tracking-widest">
+                    Pilih bulan yang ingin dibayar
+                  </p>
+                </div>
+
+                {/* Horizontal progress blocks */}
+                <div className="overflow-x-auto pb-1">
+                  <div className="flex items-stretch gap-0 min-w-max justify-center">
+                    {monthGrid.months.map((m, idx) => {
+                      const isLast = idx === 11;
+                      return (
+                        <div key={m.month} className="flex items-center">
+                          <button
+                            type="button"
+                            disabled={m.state === "paid" || m.state === "locked"}
+                            onClick={() => handleMonthToggle(m.month)}
+                            aria-pressed={m.isChecked}
+                            aria-label={`${
+                              m.state === "paid" ? "Lunas" :
+                              m.state === "locked" ? "Wajib" : m.isChecked ? "Dipilih" : "Pilih"
+                            } ${m.label}`}
+                            className={`flex flex-col items-center gap-1 px-3 py-2 sm:px-2.5 rounded-lg
+                              transition-all duration-150 select-none min-w-[56px] sm:min-w-[52px]
+                              ${
+                                m.state === "paid"
+                                  ? "cursor-default text-slate-600"
+                                  : m.state === "locked"
+                                  ? "cursor-default text-black"
+                                  : m.isChecked
+                                  ? "cursor-pointer text-black hover:bg-emerald-500/10"
+                                  : "cursor-pointer text-slate-400 hover:text-black"
+                              }`}
+                          >
+                            {/* Checkbox ring */}
+                            <span className={`h-6 w-6 sm:h-5 sm:w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all
+                              ${
+                                m.state === "paid"
+                                  ? "border-slate-600 bg-slate-700/50"
+                                  : m.state === "locked"
+                                  ? "border-amber-400 bg-amber-400"
+                                  : m.isChecked
+                                  ? "border-emerald-500 bg-emerald-500"
+                                  : "border-slate-500 bg-transparent"
+                              }`}
+                            >
+                              {(m.state === "paid" || m.state === "locked" || m.isChecked) && (
+                                <Check className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-white" strokeWidth={3} />
+                              )}
+                            </span>
+
+                            {/* Short month name */}
+                            <span className="text-xs sm:text-[11px] font-medium leading-none">{m.short}</span>
+
+                            {/* Badge */}
+                            {m.state === "locked" && (
+                              <span className="text-[8px] text-black leading-none">wajib</span>
+                            )}
+                            {m.state === "paid" && (
+                              <span className="text-[8px] text-slate-600 leading-none">lunas</span>
+                            )}
+                          </button>
+
+                          {/* Connector line between months */}
+                          {!isLast && (
+                            <div className={`h-0.5 w-3 shrink-0 rounded-full transition-colors
+                              ${
+                                m.isChecked && monthGrid.months[idx + 1].isChecked
+                                  ? "bg-emerald-500"
+                                  : m.state === "paid" && (monthGrid.months[idx + 1].state === "paid" || monthGrid.months[idx + 1].state === "locked")
+                                  ? "bg-slate-700"
+                                  : "bg-white/10"
+                              }`}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Dynamic total + year hint */}
+                <div className="border-t border-slate-100 mt-3 pt-3 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs sm:text-sm text-slate-700 font-medium">
+                      {selectedMonthCount} bulan dipilih
+                    </span>
+                    {monthGrid.maxSelectable === selectedMonthCount && (
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        Sudah maks untuk tahun {monthGrid.year}. Sisa bulan dapat dibayar tahun depan.
+                      </p>
+                    )}
+                    {selectedMonthCount > 1 && monthGrid.maxSelectable > selectedMonthCount && (
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        {MONTH_NAMES_ID[(monthGrid.startMonth) - 1]}–{MONTH_NAMES_ID[(monthGrid.startMonth) + selectedMonthCount - 2]}
+                      </p>
+                    )}
+                  </div>
+                  <p className="text-xl sm:text-2xl font-bold text-emerald-500 font-poppins">
+                    {formatRupiah(bill!.totalAmount * selectedMonthCount)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 text-xs text-slate-600 mb-4">
+              <ShieldCheck className="h-3.5 w-3.5 text-slate-600" />
+              <span className="text-slate-600">{bill?.dueDateDescription} &middot; Pembayaran aman via Midtrans</span>
+            </div>
+
+            {/* Pending Payment Warning */}
+            {hasPendingPayment && (
+              <div className="flex flex-col gap-2 bg-amber-500/20 border border-amber-400/30 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-300 shrink-0" />
+                  <div className="text-xs text-amber-200">
+                    <p className="font-medium">Ada pembayaran yang belum selesai</p>
+                    <p className="mt-0.5 text-amber-300/80">Sudah bayar tapi status masih pending? Klik "Cek Status" untuk memperbarui.</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full border-amber-400/50 text-amber-200 hover:bg-amber-500/20 hover:text-amber-100 bg-transparent"
+                  onClick={handleSyncPending}
+                  disabled={syncing}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
+                  {syncing ? "Mengecek status..." : "Cek Status Pembayaran"}
+                </Button>
+              </div>
+            )}
+
+            {/* Payment Method Info */}
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-lg p-3 mb-5">
+              <QrCode className="h-4 w-4 text-emerald-500 shrink-0" />
+              <p className="text-xs text-slate-700">
+                Metode pembayaran utama: <span className="font-semibold text-slate-900">QRIS</span> — Bisa scan dari aplikasi e-wallet manapun (GoPay, OVO, Dana, ShopeePay, dll)
+              </p>
             </div>
 
             <Button
               className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-base h-12 shadow-lg shadow-emerald-500/20"
-              disabled={paying || hasPendingPayment}
+              disabled={paying}
               onClick={() => setShowConfirmDialog(true)}
             >
               {paying ? (
@@ -310,13 +509,13 @@ export default function ResidentPaymentPage() {
                 </>
               ) : hasPendingPayment ? (
                 <>
-                  <Clock className="h-5 w-5 mr-2" />
-                  Ada Pembayaran Pending
+                  <CreditCard className="h-5 w-5 mr-2" />
+                  Lanjutkan Pembayaran
                 </>
               ) : (
                 <>
                   <CreditCard className="h-5 w-5 mr-2" />
-                  Bayar Sekarang
+                  Bayar {selectedMonthCount > 1 ? `${selectedMonthCount} Bulan` : "Sekarang"} &mdash; {formatRupiah((bill?.totalAmount || 0) * selectedMonthCount)}
                 </>
               )}
             </Button>
@@ -457,20 +656,54 @@ export default function ResidentPaymentPage() {
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="font-poppins">Konfirmasi Pembayaran</AlertDialogTitle>
+            <AlertDialogTitle className="font-poppins">
+              {hasPendingPayment
+                ? "Lanjutkan Pembayaran"
+                : selectedMonthCount > 1
+                ? `Konfirmasi Pembayaran ${selectedMonthCount} Bulan`
+                : "Konfirmasi Pembayaran"}
+            </AlertDialogTitle>
             <AlertDialogDescription className="space-y-3">
-              <span className="block">Anda akan membayar iuran bulanan sebesar:</span>
+              {hasPendingPayment ? (
+                <span className="block text-amber-600 font-medium">
+                  Anda memiliki pembayaran yang belum selesai. Klik lanjutkan untuk menyelesaikan pembayaran.
+                </span>
+              ) : (
+                <span className="block">
+                  Anda akan membayar iuran untuk{" "}
+                  <span className="font-semibold text-slate-900">{selectedMonthCount} bulan</span>
+                  :
+                </span>
+              )}
 
-              {bill?.breakdown.map((item, idx) => (
-                <span key={idx} className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Iuran {item.type} ({item.groupName})</span>
-                  <span className="font-semibold text-slate-900">{formatRupiah(item.amount)}</span>
+              {!hasPendingPayment && monthGrid.months.filter((m) => m.isChecked).map((m) => (
+                <span key={m.month} className="flex items-center gap-2 text-sm">
+                  <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  <span className="text-slate-600">{m.label} {m.year}</span>
                 </span>
               ))}
 
+              {!hasPendingPayment && (
+                <span className="block mt-1 pt-2 border-t">
+                  {bill?.breakdown.map((item, idx) => (
+                    <span key={idx} className="flex items-center justify-between text-sm mb-1">
+                      <span className="text-slate-500">Iuran {item.type} × {selectedMonthCount}</span>
+                      <span className="font-medium text-slate-800">{formatRupiah(item.amount * selectedMonthCount)}</span>
+                    </span>
+                  ))}
+                </span>
+              )}
+
               <span className="flex items-center justify-between text-base font-bold border-t pt-2">
                 <span className="text-slate-800">Total</span>
-                <span className="text-primary">{formatRupiah(bill?.totalAmount || 0)}</span>
+                <span className="text-primary">{formatRupiah((bill?.totalAmount || 0) * (hasPendingPayment ? 1 : selectedMonthCount))}</span>
+              </span>
+
+              <span className="block mt-3 p-2 bg-slate-50 rounded-lg border">
+                <span className="flex items-center gap-2 text-xs text-slate-600">
+                  <QrCode className="h-3.5 w-3.5 text-emerald-500" />
+                  Pembayaran utama via <span className="font-semibold">QRIS</span> — scan dari e-wallet manapun
+                </span>
               </span>
 
               <span className="block text-xs text-slate-400 mt-2">
@@ -482,7 +715,7 @@ export default function ResidentPaymentPage() {
             <AlertDialogCancel>Batal</AlertDialogCancel>
             <AlertDialogAction onClick={handlePayDues} className="bg-emerald-600 hover:bg-emerald-700">
               <ShieldCheck className="h-4 w-4 mr-1" />
-              Lanjutkan Pembayaran
+              {hasPendingPayment ? "Lanjutkan Pembayaran" : "Bayar Sekarang"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

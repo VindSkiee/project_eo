@@ -17,6 +17,16 @@ export default function DuesConfigPage() {
   const [config, setConfig] = useState<DuesConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Get user role from localStorage
+  const userRole = (() => {
+    try {
+      const stored = localStorage.getItem("user");
+      return stored ? JSON.parse(stored).role : null;
+    } catch {
+      return null;
+    }
+  })();
+
   const fetchConfig = async () => {
     setLoading(true);
     try {
@@ -78,6 +88,7 @@ export default function DuesConfigPage() {
             currentRule={config.duesRule}
             groupName={config.group.name}
             onSuccess={fetchConfig}
+            userRole={userRole}
           />
 
           {/* Children DuesRules Table (for RW/LEADER) */}

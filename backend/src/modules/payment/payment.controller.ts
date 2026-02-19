@@ -18,6 +18,7 @@ import type { ActiveUserData } from '@common/decorators/active-user.decorator';
 
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { RequestRefundDto } from './dto/request-refund.dto';
+import { PayDuesDto } from './dto/pay-dues.dto';
 import { SkipThrottle, Throttle } from '@nestjs/throttler/dist/throttler.decorator';
 
 @Controller('payment')
@@ -128,9 +129,25 @@ export class PaymentController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('pay-dues')
   @HttpCode(HttpStatus.OK)
-  async payDues(@ActiveUser() user: ActiveUserData) {
-    // Frontend cukup panggil endpoint ini tanpa kirim body apa-apa
-    // Karena harga dihitung otomatis di backend
-    return this.paymentService.createDuesPayment(user);
+  async payDues(
+    @ActiveUser() user: ActiveUserData,
+    @Body() dto: PayDuesDto,
+  ) {
+    // months: 1-12, server tervalidasi via DTO
+    return this.paymentService.createDuesPayment(user, dto.months ?? 1);
+  }
+
+  // ==========================================
+  // 5. SYNC PAYMENT STATUS FROM MIDTRANS
+  // Digunakan di development (localhost) dimana webhook tidak bisa diterima,
+  // atau sebagai fallback ketika webhook terlambat.
+  // ==========================================
+  @Post('sync/:orderId')
+  @HttpCode(HttpStatus.OK)
+  async syncPaymentStatus(
+    @ActiveUser() user: ActiveUserData,
+    @Param('orderId') orderId: string,
+  ) {
+    return this.paymentService.syncPaymentFromMidtrans(orderId, user);
   }
 }

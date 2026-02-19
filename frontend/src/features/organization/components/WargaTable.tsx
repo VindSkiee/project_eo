@@ -104,7 +104,7 @@ export function WargaTable({
               <tr
                 key={user.id}
                 onClick={() => onUserClick(user.id)}
-                className={`group hover:bg-slate-50/80 transition-all duration-200 cursor-pointer ${isSelf ? "bg-primary/5" : ""}`}
+                className="group hover:bg-slate-50/80 transition-all duration-200 cursor-pointer"
               >
                 <td className="px-6 py-4 whitespace-nowrap text-center">
                   <span className="text-sm text-slate-400 font-mono">
@@ -121,7 +121,7 @@ export function WargaTable({
                     <div>
                       <p className={`transition-colors ${isSelf ? "font-bold text-primary" : "font-medium text-slate-700 group-hover:text-slate-900"}`}>
                         {user.fullName}
-                        {isSelf && <span className="ml-1.5 text-[10px] font-medium text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded-full">saya</span>}
+                        {isSelf && <span className="ml-1.5 text-[10px] font-semibold bg-brand-green text-white px-1.5 py-0.5 rounded-full">saya</span>}
                       </p>
                       <p className="text-xs text-slate-400 sm:hidden mt-0.5">{user.email}</p>
                     </div>

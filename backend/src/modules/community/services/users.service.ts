@@ -181,6 +181,24 @@ export class UsersService {
       (where.AND as any[]).push({
         communityGroupId: requester.communityGroupId,
       });
+    } else if (requester.roleType === SystemRoleType.TREASURER) {
+      // Treasurer -> Bisa lihat user di group sendiri & sibling groups (di bawah parent RW)
+      const treasurerGroup = await this.prisma.communityGroup.findUnique({
+        where: { id: requester.communityGroupId },
+        select: { type: true, parentId: true },
+      });
+      if (treasurerGroup?.type === 'RT') {
+        // Treasurer RT -> hanya bisa lihat user di group sendiri
+        (where.AND as any[]).push({
+          communityGroupId: requester.communityGroupId,
+        });
+      }
+      // Treasurer RW -> Bebas (bisa lihat semua)
+    } else if (requester.roleType === SystemRoleType.RESIDENT) {
+      // Warga -> TERKUNCI di Group-nya sendiri
+      (where.AND as any[]).push({
+        communityGroupId: requester.communityGroupId,
+      });
     }
     // Leader RW -> Bebas
 
