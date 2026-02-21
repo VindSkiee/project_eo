@@ -11,9 +11,15 @@ import { json, urlencoded } from 'express'; // <-- IMPORT BARU
 import { randomUUID } from 'crypto'; // <-- IMPORT BARU (Bawaan Node.js)
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor'; // <-- KITA BUAT NANTI
 import { NestExpressApplication } from '@nestjs/platform-express/interfaces/nest-express-application.interface';
+import * as path from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // STATIC FILES: Serve /uploads directory for profile images, etc.
+  app.useStaticAssets(path.resolve(process.cwd(), 'uploads'), {
+    prefix: '/uploads/',
+  });
 
   // 1. SECURITY (Helmet)
   // Menghapus x-powered-by dan menambah header keamanan lainnya

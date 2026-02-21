@@ -21,6 +21,8 @@ import {
   PartyPopper,
   Clock,
   AlertTriangle,
+  Trophy,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
@@ -114,6 +116,11 @@ export default function ResidentDashboard() {
   }, []);
 
   const hasUnpaidBill = bill !== null && bill.totalAmount > 0;
+
+  // Full-year paid: no unpaid bill AND next bill is in the following year
+  const currentYear = new Date().getFullYear();
+  const paidFullYear = !hasUnpaidBill && bill !== null && bill.nextBillYear > currentYear;
+
   const approvedEvents = events.filter((e) =>
     ["APPROVED", "FUNDED", "ONGOING", "COMPLETED"].includes(e.status)
   );
@@ -238,6 +245,34 @@ export default function ResidentDashboard() {
                   Bayar Sekarang
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : paidFullYear ? (
+        <Card className="border-amber-300 bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 overflow-hidden shadow-sm">
+          <CardContent className="p-0">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-5 sm:p-6">
+              <div className="relative shrink-0">
+                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center shadow-lg shadow-amber-200">
+                  <Trophy className="h-7 w-7 text-white" />
+                </div>
+                <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-yellow-400 flex items-center justify-center">
+                  <Sparkles className="h-3 w-3 text-white" />
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-bold text-amber-800 font-poppins">Iuran Lunas Setahun Penuh! 🎉</p>
+                  <span className="text-[10px] font-semibold bg-amber-400 text-white px-2 py-0.5 rounded-full">{currentYear}</span>
+                </div>
+                <p className="text-xs text-amber-700 mt-1">
+                  Selamat! Seluruh iuran Anda di tahun <span className="font-semibold">{currentYear}</span> telah lunas. Terima kasih atas dedikasi Anda untuk lingkungan.
+                </p>
+                <p className="text-xs text-amber-600 mt-2 flex items-center gap-1.5">
+                  <Megaphone className="h-3.5 w-3.5 shrink-0" />
+                  Pantau terus <span className="font-semibold">MarinaKas</span> untuk mendapatkan informasi terbaru seputar kegiatan dan acara warga!
+                </p>
               </div>
             </div>
           </CardContent>

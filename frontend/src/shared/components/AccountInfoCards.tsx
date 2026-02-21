@@ -14,28 +14,28 @@ const seedAccounts: Account[] = [
         email: "rw@warga.id",
         fullName: "Bapak Ketua RW",
         password: "123456",
-        role: "Ketua RW",
+        role: "LEADER",
         roleType: "LEADER"
     },
     {
         email: "rt01@warga.id",
         fullName: "Bapak RT Satu",
         password: "123456",
-        role: "Ketua RT",
+        role: "ADMIN",
         roleType: "ADMIN"
     },
     {
         email: "bendahara.rw@warga.id",
         fullName: "Ibu Bendahara RW",
         password: "123456",
-        role: "Bendahara RW",
+        role: "TREASURER",
         roleType: "TREASURER"
     },
     {
         email: "warga01@warga.id",
         fullName: "Udin Warga",
         password: "123456",
-        role: "Warga",
+        role: "RESIDENT",
         roleType: "RESIDENT"
     }
 ];

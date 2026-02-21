@@ -21,6 +21,7 @@ import { CommunityModule } from './modules/community/community.module';
 import { EventsModule } from './modules/events/events.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { PaymentModule } from './modules/payment/payment.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 // Global Providers
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
@@ -44,6 +45,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     EventsModule,
     FinanceModule,
     PaymentModule,
+    SettingsModule,
     ThrottlerModule.forRoot([
       // 1. Anti-Spam Cepat (Burst Protection)
       // Izinkan 5 request dalam 1 detik (untuk loading awal dashboard)

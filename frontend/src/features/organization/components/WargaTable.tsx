@@ -1,16 +1,9 @@
 import { Users, Pencil, Trash2 } from "lucide-react";
 import { Skeleton } from "@/shared/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 import type { UserItem } from "@/shared/types";
-
-const roleLabel = (role: string) => {
-  switch (role) {
-    case "LEADER": return "Ketua RW";
-    case "ADMIN": return "Ketua RT";
-    case "TREASURER": return "Bendahara";
-    case "RESIDENT": return "Warga";
-    default: return role || "Warga";
-  }
-};
+import { getRoleLabel } from "@/shared/helpers/roleLabel";
+import { getAvatarUrl } from "@/shared/helpers/avatarUrl";
 
 function sortMembers(members: UserItem[], currentUserId?: string): UserItem[] {
   const getPriority = (u: UserItem): number => {
@@ -113,11 +106,12 @@ export function WargaTable({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-left">
                   <div className="flex items-center gap-3">
-                    <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${isSelf ? "bg-gradient-to-br from-primary/20 to-primary/30" : "bg-gradient-to-br from-slate-100 to-slate-200"}`}>
-                      <span className={`text-xs font-medium ${isSelf ? "text-primary" : "text-slate-600"}`}>
+                    <Avatar className={`h-8 w-8 shrink-0 ${isSelf ? 'ring-2 ring-primary/30' : ''}`}>
+                      {getAvatarUrl(user.profileImage) && <AvatarImage src={getAvatarUrl(user.profileImage)!} alt={user.fullName} className="object-cover" />}
+                      <AvatarFallback className={`text-xs font-medium ${isSelf ? 'bg-primary/20 text-primary' : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600'}`}>
                         {user.fullName?.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
+                      </AvatarFallback>
+                    </Avatar>
                     <div>
                       <p className={`transition-colors ${isSelf ? "font-bold text-primary" : "font-medium text-slate-700 group-hover:text-slate-900"}`}>
                         {user.fullName}
@@ -145,7 +139,7 @@ export function WargaTable({
                       }
                     `}
                   >
-                    {roleLabel((user.roleType || user.role?.type) ?? "RESIDENT")}
+                    {getRoleLabel((user.roleType || user.role?.type) ?? "RESIDENT")}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-center text-slate-500 hidden md:table-cell">

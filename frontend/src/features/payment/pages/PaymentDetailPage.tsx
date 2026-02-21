@@ -205,7 +205,7 @@ export default function PaymentDetailPage() {
   };
 
   const goBack = () => {
-    navigate("/dashboard/pembayaran-warga");
+    navigate(-1);
   };
 
   // === LOADING STATE ===
@@ -226,9 +226,7 @@ export default function PaymentDetailPage() {
   if (error || !payment) {
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
-        <Button variant="outline" size="sm" onClick={goBack}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Kembali
-        </Button>
+        <ArrowLeft className="h-4 w-4 mr-1" onClick={goBack} />
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <XCircle className="h-12 w-12 text-slate-300 mb-4" />
@@ -254,17 +252,17 @@ export default function PaymentDetailPage() {
     <div className="space-y-6 animate-in fade-in duration-500 max-w-2xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" onClick={goBack}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Kembali
-        </Button>
+
+        <ArrowLeft className="h-4 w-4 mr-1" onClick={goBack} />
+
         <h1 className="text-xl sm:text-2xl font-bold font-poppins text-slate-900">
           Detail Transaksi
         </h1>
       </div>
 
       {/* Status Banner */}
-      <Card className="overflow-hidden border-0 shadow-lg">
-        <div className={`bg-gradient-to-r ${status.gradient} p-6 text-white`}>
+      <Card className={`bg-gradient-to-r overflow-hidden ${status.gradient}`}>
+        <div className="p-6 text-white">
           <div className="flex items-center gap-3 mb-2">
             <div className="h-12 w-12 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
               <StatusIcon className="h-6 w-6 text-white" />
@@ -295,24 +293,21 @@ export default function PaymentDetailPage() {
 
           <Separator />
 
-          {/* Order ID */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-2.5 min-w-0">
-              <Hash className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-xs text-slate-500">Order ID</p>
-                <p className="text-sm font-medium text-slate-900 break-all">{payment.orderId}</p>
+
+          {/* User Info */}
+          {payment.user && (
+            <>
+
+              <div className="flex items-center gap-2.5">
+                <User className="h-4 w-4 text-slate-400 shrink-0" />
+                <div>
+                  <p className="text-xs text-slate-500">Pembayar</p>
+                  <p className="text-sm font-medium text-slate-900">{payment.user.fullName}</p>
+                  <p className="text-xs text-slate-400">{payment.user.email}</p>
+                </div>
               </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0"
-              onClick={() => copyToClipboard(payment.orderId, "Order ID")}
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+            </>
+          )}
 
           {/* Status */}
           <div className="flex items-center gap-2.5">
@@ -385,7 +380,7 @@ export default function PaymentDetailPage() {
                 <ExternalLink className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-xs text-slate-500">Midtrans Transaction ID</p>
-                  <p className="text-sm font-mono text-slate-700 break-all">{payment.midtransId}</p>
+                  <p className="text-sm font-medium text-black break-all">{payment.midtransId}</p>
                 </div>
               </div>
               <Button
@@ -398,6 +393,25 @@ export default function PaymentDetailPage() {
               </Button>
             </div>
           )}
+          {/* Order ID */}
+          <div className="flex items-start justify-between gap-3">
+
+            <div className="flex items-start gap-2.5 min-w-0">
+              <Hash className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs text-slate-500">Order ID</p>
+                <p className="text-sm font-medium text-slate-900 break-all">{payment.orderId}</p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={() => copyToClipboard(payment.orderId, "Order ID")}
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
 
           <Separator />
 
@@ -420,20 +434,7 @@ export default function PaymentDetailPage() {
             </div>
           )}
 
-          {/* User Info */}
-          {payment.user && (
-            <>
-              <Separator />
-              <div className="flex items-center gap-2.5">
-                <User className="h-4 w-4 text-slate-400 shrink-0" />
-                <div>
-                  <p className="text-xs text-slate-500">Pembayar</p>
-                  <p className="text-sm font-medium text-slate-900">{payment.user.fullName}</p>
-                  <p className="text-xs text-slate-400">{payment.user.email}</p>
-                </div>
-              </div>
-            </>
-          )}
+
         </CardContent>
       </Card>
 

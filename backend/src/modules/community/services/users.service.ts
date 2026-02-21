@@ -9,7 +9,8 @@ import * as bcrypt from 'bcrypt';
 import { SystemRoleType, Prisma } from '@prisma/client';
 
 import { UsersRepository } from '../repositories/users.repository';
-import { PrismaService } from '../../../database/prisma.service'; // Sesuaikan path
+import { PrismaService } from '../../../database/prisma.service';
+import { StorageService } from '../../../providers/storage/storage.service';
 
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
@@ -25,6 +26,7 @@ export class UsersService {
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly prisma: PrismaService,
+    private readonly storageService: StorageService,
   ) { }
 
   /**
@@ -267,6 +269,35 @@ export class UsersService {
       email: dto.email,
       phone: dto.phone,
       address: dto.address,
+    });
+
+    return this.sanitizeUser(updatedUser);
+  }
+
+  /**
+   * UPLOAD AVATAR (Self Service)
+   * Compress image → save → update profileImage field
+   */
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    // 1. Get current user to delete old avatar if exists
+    const user = await this.usersRepository.findById(userId);
+    if (!user) throw new NotFoundException('User tidak ditemukan');
+
+    // 2. Delete old avatar file if it exists
+    if (user.profileImage) {
+      try {
+        await this.storageService.deleteFile(user.profileImage);
+      } catch {
+        // Ignore deletion errors for old files
+      }
+    }
+
+    // 3. Upload & compress new image
+    const imageUrl = await this.storageService.uploadImage(file, 'avatars', 512, 512);
+
+    // 4. Update user record
+    const updatedUser = await this.usersRepository.update(userId, {
+      profileImage: imageUrl,
     });
 
     return this.sanitizeUser(updatedUser);

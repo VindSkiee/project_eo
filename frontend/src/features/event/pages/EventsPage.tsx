@@ -21,6 +21,8 @@ import { toast } from "sonner";
 import { eventService } from "@/features/event/services/eventService";
 import { userService } from "@/shared/services/userService";
 import type { EventItem, UserItem } from "@/shared/types";
+import { DateRangeFilter } from "@/shared/components/DateRangeFilter";
+import type { DateRange } from "@/shared/components/DateRangeFilter";
 import {
     CreateEventDialog,
     EditEventDialog,
@@ -35,6 +37,7 @@ export default function EventsPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [activeTab, setActiveTab] = useState("semua");
+    const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
     // Resolve event detail path based on current route
     const getEventDetailPath = (id: string) => {
@@ -108,11 +111,25 @@ export default function EventsPage() {
         const matchSearch =
             e.title.toLowerCase().includes(search.toLowerCase()) ||
             e.description.toLowerCase().includes(search.toLowerCase());
-        if (activeTab === "semua") return matchSearch;
-        if (activeTab === "menunggu") return matchSearch && e.status === "PENDING_APPROVAL";
-        if (activeTab === "aktif") return matchSearch && (e.status === "APPROVED" || e.status === "IN_PROGRESS");
-        if (activeTab === "selesai") return matchSearch && (e.status === "COMPLETED" || e.status === "CANCELLED" || e.status === "REJECTED");
-        return matchSearch;
+        if (!matchSearch) return false;
+        if (dateRange?.from) {
+            const raw = e.startDate || e.createdAt;
+            const d = new Date(raw);
+            d.setHours(0, 0, 0, 0);
+            const from = new Date(dateRange.from);
+            from.setHours(0, 0, 0, 0);
+            if (d < from) return false;
+            if (dateRange.to) {
+                const to = new Date(dateRange.to);
+                to.setHours(23, 59, 59, 999);
+                if (d > to) return false;
+            }
+        }
+        if (activeTab === "semua") return true;
+        if (activeTab === "menunggu") return e.status === "PENDING_APPROVAL";
+        if (activeTab === "aktif") return e.status === "APPROVED" || e.status === "IN_PROGRESS";
+        if (activeTab === "selesai") return e.status === "COMPLETED" || e.status === "CANCELLED" || e.status === "REJECTED";
+        return true;
     });
 
     const pendingCount = events.filter((e) => e.status === "PENDING_APPROVAL").length;
@@ -271,14 +288,21 @@ export default function EventsPage() {
                         <TabsTrigger value="aktif">Aktif</TabsTrigger>
                         <TabsTrigger value="selesai">Selesai</TabsTrigger>
                     </TabsList>
-                    <div className="relative max-w-sm">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <Input
-                            placeholder="Cari kegiatan..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="pl-9"
+                    <div className="flex gap-2 flex-wrap">
+                        <DateRangeFilter
+                            value={dateRange}
+                            onChange={setDateRange}
+                            placeholder="Filter tanggal"
                         />
+                        <div className="relative max-w-sm">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <Input
+                                placeholder="Cari kegiatan..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="pl-9"
+                            />
+                        </div>
                     </div>
                 </div>
 

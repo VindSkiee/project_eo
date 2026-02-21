@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import imageCompression from "browser-image-compression";
 import { userService } from "@/shared/services/userService";
 import type { UserItem } from "@/shared/types";
+import { emitSidebarUpdate } from "@/shared/helpers/sidebarEvents";
 import {
     ProfileHeader,
     EditProfileForm,
@@ -84,6 +85,7 @@ export default function ProfilePage() {
                 } catch { /* ignore */ }
             }
 
+            emitSidebarUpdate();
             fetchProfile();
         } catch (err: unknown) {
             const message =
@@ -133,7 +135,7 @@ export default function ProfilePage() {
 
         setUploading(true);
         try {
-            // Compress image
+            // Compress image on client before uploading
             const compressed = await imageCompression(file, {
                 maxSizeMB: 1,
                 maxWidthOrHeight: 1024,
@@ -141,20 +143,26 @@ export default function ProfilePage() {
                 useWebWorker: true,
             });
 
-            // Upload
-            try {
-                await userService.uploadFile(compressed);
-                toast.success("Foto profil berhasil diupload!");
-                fetchProfile();
-            } catch {
-                // Storage backend is a stub — mock success
-                toast.info("Upload belum tersedia di server, namun kompresi gambar berhasil.");
+            // Upload to backend (server also compresses with sharp)
+            const updatedUser = await userService.uploadAvatar(compressed);
+            toast.success("Foto profil berhasil diupload!");
+
+            // Update localStorage with new profileImage
+            const userStr = localStorage.getItem("user");
+            if (userStr) {
+                try {
+                    const stored = JSON.parse(userStr);
+                    stored.profileImage = updatedUser.profileImage;
+                    localStorage.setItem("user", JSON.stringify(stored));
+                } catch { /* ignore */ }
             }
+
+            emitSidebarUpdate();
+            fetchProfile();
         } catch {
-            toast.error("Gagal mengompresi gambar.");
+            toast.error("Gagal mengupload foto profil.");
         } finally {
             setUploading(false);
-            // Reset input
             e.target.value = "";
         }
     };

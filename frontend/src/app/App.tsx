@@ -25,6 +25,7 @@ import DuesConfigPage from "@/features/finance/pages/DuesConfigPage";
 import GroupFinanceDetailPage from "@/features/finance/pages/GroupFinanceDetailPage";
 import TransactionDetailPage from "@/features/finance/pages/TransactionDetailPage";
 import GroupDuesProgressPage from "@/features/finance/pages/GroupDuesProgressPage";
+import RoleLabelSettingsPage from "@/features/settings/pages/RoleLabelSettingsPage";
 
 // --- 1. UTILITY FUNCTIONS ---
 const isAuthenticated = () => {
@@ -119,6 +120,7 @@ function App() {
                   <Route path="events/:id" element={<EventDetailPage />} />
                   <Route path="kas" element={<FinancePage />} />
                   <Route path="pembayaran" element={<PaymentPage />} />
+                  <Route path="pembayaran/:id" element={<PaymentDetailPage />} />
                   <Route path="keuangan-rt/:groupId" element={<GroupFinanceDetailPage />} />
                   <Route path="transaksi/:id" element={<TransactionDetailPage />} />
                 </Route>
@@ -130,6 +132,7 @@ function App() {
                   <Route path="events-rt/:id" element={<EventDetailPage />} />
                   <Route path="kas-rt" element={<FinancePage />} />
                   <Route path="pembayaran-rt" element={<PaymentPage />} />
+                  <Route path="pembayaran-rt/:id" element={<PaymentDetailPage />} />
                   <Route path="keuangan-rt/:groupId" element={<GroupFinanceDetailPage />} />
                   <Route path="transaksi-rt/:id" element={<TransactionDetailPage />} />
                 </Route>
@@ -142,6 +145,7 @@ function App() {
                   <Route path="events-bendahara/:id" element={<EventDetailPage />} />
                   <Route path="kas-bendahara" element={<FinancePage />} />
                   <Route path="pembayaran-bendahara" element={<PaymentPage />} />
+                  <Route path="pembayaran-bendahara/:id" element={<PaymentDetailPage />} />
                   <Route path="transaksi-bendahara/:id" element={<TransactionDetailPage />} />
                   <Route path="keuangan-rt-bendahara/:groupId" element={<GroupFinanceDetailPage />} />
                   <Route path="progres-iuran-bendahara/:groupId" element={<GroupDuesProgressPage />} />
@@ -150,6 +154,7 @@ function App() {
                 {/* LEADER boleh buka halaman organisasi */}
                 <Route element={<RoleProtectedRoute allowedRoles={["LEADER"]} />}>
                   <Route path="organisasi" element={<OrganizationPage />} />
+                  <Route path="pengaturan" element={<RoleLabelSettingsPage />} />
                 </Route>
 
                 {/* ADMIN boleh buka halaman organisasi */}
@@ -157,8 +162,8 @@ function App() {
                   <Route path="organisasi-rt" element={<OrganizationPage />} />
                 </Route>
 
-                {/* Detail User — Accessible by LEADER, ADMIN, dan TREASURER */}
-                <Route element={<RoleProtectedRoute allowedRoles={["LEADER", "ADMIN", "TREASURER"]} />}>
+                {/* Detail User — Accessible by LEADER, ADMIN, TREASURER, dan RESIDENT */}
+                <Route element={<RoleProtectedRoute allowedRoles={["LEADER", "ADMIN", "TREASURER", "RESIDENT"]} />}>
                   <Route path="users/:id" element={<UserDetailPage />} />
                 </Route>
 

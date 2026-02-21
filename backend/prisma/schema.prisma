@@ -99,6 +99,7 @@ model CommunityGroup {
   fundRequestsSent     FundRequest[] @relation("FundRequester")
   fundRequestsReceived FundRequest[] @relation("FundTarget")
   duesRule             DuesRule?
+  roleLabelSettings    RoleLabelSetting[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -114,6 +115,7 @@ model User {
   fullName         String
   phone            String?
   address          String?
+  profileImage     String?
   isActive         Boolean        @default(true)
   
   roleId           Int
@@ -396,4 +398,19 @@ model FundRequest {
   // 2. Outbox RT (Melihat request terkirim: requesterGroup)
   @@index([targetGroupId, status])
   @@index([requesterGroupId])
+}
+
+// --- ROLE LABEL SETTINGS ---
+
+model RoleLabelSetting {
+  id               Int            @id @default(autoincrement())
+  roleType         SystemRoleType
+  label            String
+  communityGroupId Int
+  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([roleType, communityGroupId])
+  @@index([communityGroupId])
 }

@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
-import { 
-  LayoutDashboard, 
-  Wallet, 
-  Users, 
-  UserCircle, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  Wallet,
+  Users,
+  UserCircle,
+  LogOut,
   Menu,
   Building2,
   CalendarDays,
   CreditCard,
+  Settings,
 } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
@@ -28,9 +29,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/ui/alert-dialog";
-import { Avatar, AvatarFallback } from "@/shared/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 import { toast } from "sonner";
 import { authService } from "@/features/auth/services/authService";
+import { getRoleLabel, loadCustomRoleLabels } from "@/shared/helpers/roleLabel";
+import { getAvatarUrl } from "@/shared/helpers/avatarUrl";
+import { onSidebarUpdate, offSidebarUpdate } from "@/shared/helpers/sidebarEvents";
 
 // Tipe data user dari LocalStorage
 interface User {
@@ -38,6 +42,7 @@ interface User {
   email: string;
   fullName: string;
   role: string;
+  profileImage?: string | null;
 }
 
 export default function DashboardLayout() {
@@ -46,13 +51,37 @@ export default function DashboardLayout() {
   const [user, setUser] = useState<User | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [roleLabel, setRoleLabel] = useState("");
 
-  // 1. Ambil Data User Saat Komponen Dimuat
-  useEffect(() => {
+  // Helper to read user from localStorage
+  const readUser = () => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      try { return JSON.parse(storedUser) as User; } catch { return null; }
     }
+    return null;
+  };
+
+  // 1. Ambil Data User + Load Labels Saat Komponen Dimuat
+  useEffect(() => {
+    const u = readUser();
+    setUser(u);
+    loadCustomRoleLabels().then(() => {
+      setRoleLabel(getRoleLabel(u?.role));
+    });
+  }, []);
+
+  // 2. Listen for sidebar update events (avatar upload, role label change)
+  useEffect(() => {
+    const handleUpdate = () => {
+      const u = readUser();
+      setUser(u);
+      loadCustomRoleLabels().then(() => {
+        setRoleLabel(getRoleLabel(u?.role));
+      });
+    };
+    onSidebarUpdate(handleUpdate);
+    return () => offSidebarUpdate(handleUpdate);
   }, []);
 
   // 2. Fungsi Logout
@@ -78,21 +107,22 @@ export default function DashboardLayout() {
       menu.push({ title: "Kegiatan", path: "/dashboard/kegiatan", icon: CalendarDays });
       menu.push({ title: "Kas & Keuangan", path: "/dashboard/kas", icon: Wallet });
       menu.push({ title: "Pembayaran", path: "/dashboard/pembayaran", icon: CreditCard });
-    } 
+      menu.push({ title: "Pengaturan", path: "/dashboard/pengaturan", icon: Settings });
+    }
     else if (role === "ADMIN") {
       menu.push({ title: "Dashboard", path: "/dashboard/rt", icon: LayoutDashboard });
       menu.push({ title: "Data Warga RT", path: "/dashboard/organisasi-rt", icon: Users });
       menu.push({ title: "Kegiatan", path: "/dashboard/kegiatan-rt", icon: CalendarDays });
       menu.push({ title: "Kas & Keuangan", path: "/dashboard/kas-rt", icon: Wallet });
       menu.push({ title: "Pembayaran", path: "/dashboard/pembayaran-rt", icon: CreditCard });
-    } 
+    }
     else if (role === "TREASURER") {
       menu.push({ title: "Dashboard", path: "/dashboard/finance", icon: Wallet });
       menu.push({ title: "Organisasi", path: "/dashboard/organisasi-bendahara", icon: Building2 });
       menu.push({ title: "Kegiatan", path: "/dashboard/kegiatan-bendahara", icon: CalendarDays });
       menu.push({ title: "Kas & Keuangan", path: "/dashboard/kas-bendahara", icon: Wallet });
       menu.push({ title: "Pembayaran", path: "/dashboard/pembayaran-bendahara", icon: CreditCard });
-    } 
+    }
     else {
       // Default / RESIDENT
       menu.push({ title: "Beranda Warga", path: "/dashboard/warga", icon: LayoutDashboard });
@@ -109,98 +139,120 @@ export default function DashboardLayout() {
   const menuItems = getMenuItems(user?.role);
 
   // 4. Sidebar Content (Glass Sidebar - Shared Desktop & Mobile)
-  const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
-    <>
-      
-
-      {/* Profile Section */}
-      <div className={`flex items-center gap-3 pt-6 pb-5 ${collapsed ? 'px-3 justify-center' : 'px-6'}`}>
-        <Avatar className="h-12 w-12 border-2 border-white/20 shadow-lg">
-          <AvatarFallback className="bg-white/10 text-white font-bold text-lg font-poppins">
-            {user?.fullName?.charAt(0).toUpperCase() || "U"}
-          </AvatarFallback>
-        </Avatar>
+  const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => {
+    const avatarUrl = getAvatarUrl(user?.profileImage);
+    return (
+      <>
+        {/* Logo */}
+      <div className={`flex items-center pt-5 pb-2 transition-all duration-300 ${collapsed ? 'px-3 justify-center' : 'px-5 gap-3'}`}>
+        <img
+          src="/images/logoRB.webp"
+          alt="Logo Marinakas"
+          className={`object-contain shrink-0 transition-all duration-300 ${collapsed ? 'h-8 w-8' : 'h-6.5'}`} 
+        />
         {!collapsed && (
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-[0.4px] text-white/50 leading-[22px]">
-              {user?.role || "GUEST"}
-            </p>
-            <p className="text-[14px] font-medium text-white leading-[20px] truncate">
-              {user?.fullName || "User"}
-            </p>
+          <div className="font-extrabold text-[26px] leading-none tracking-tight truncate transition-opacity duration-300 font-montserrat flex-1">
+            <span className="text-white">MARINA</span>
+            <span className="text-primary">KAS</span>
           </div>
         )}
       </div>
 
-      {/* Divider */}
-      <div className="h-px w-full opacity-20">
-        <div className="h-full w-full bg-gradient-to-r from-transparent via-white to-transparent" />
-      </div>
+        {/* Divider */}
+        <div className="h-px w-full opacity-20">
+          <div className="h-full w-full bg-white/60" />
+        </div>
 
-      {/* Menu Section */}
-      <div className={`flex-1 pt-4 pb-2 overflow-y-auto ${collapsed ? 'px-3' : 'px-5'}`}>
-        {!collapsed && (
-          <p className="text-[11px] font-medium uppercase tracking-[0.4px] text-white/40 px-4 mb-2 leading-[24px]">
-            Menu
-          </p>
-        )}
-        <nav className="flex flex-col gap-[2px]">
-          {menuItems.map((item) => {
-            const isActive = location.pathname.includes(item.path);
-            const Icon = item.icon;
-            return (
-              <Link key={item.path} to={item.path}>
-                <div
-                  className={`relative flex items-center gap-4 rounded-xl transition-all duration-200 font-medium text-[14px] leading-[20px] ${collapsed ? 'px-3 py-[14px] justify-center' : 'px-4 py-[14px]'}
+        {/* Profile Section */}
+        <div className={`flex items-center gap-3 pt-3 pb-5 ${collapsed ? 'px-3 justify-center' : 'px-6'}`}>
+          <Avatar className="h-12 w-12 border-2 border-white/20 shadow-lg">
+            {avatarUrl && <AvatarImage src={avatarUrl} alt={user?.fullName || "Avatar"} className="object-cover" />}
+            <AvatarFallback className="bg-white/10 text-white font-bold text-lg font-poppins">
+              {user?.fullName?.charAt(0).toUpperCase() || "U"}
+            </AvatarFallback>
+          </Avatar>
+          {!collapsed && (
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-[0.4px] text-white/50 leading-[22px]">
+                {roleLabel || getRoleLabel(user?.role)}
+              </p>
+              <p className="text-[14px] font-medium text-white leading-[20px] truncate">
+                {user?.fullName || "User"}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div className="h-px w-full opacity-20">
+          <div className="h-full w-full bg-white/60" />
+        </div>
+
+        {/* Menu Section */}
+        <div className={`flex-1 pt-4 pb-2 overflow-y-auto ${collapsed ? 'px-3' : 'px-5'}`}>
+          {!collapsed && (
+            <p className="text-[11px] font-medium uppercase tracking-[0.4px] text-white/40 px-4 mb-2 leading-[24px]">
+              Menu
+            </p>
+          )}
+          <nav className="flex flex-col gap-[2px]">
+            {menuItems.map((item) => {
+              const isActive = location.pathname.includes(item.path);
+              const Icon = item.icon;
+              return (
+                <Link key={item.path} to={item.path}>
+                  <div
+                    className={`relative flex items-center gap-4 rounded-xl transition-all duration-200 font-medium text-[14px] leading-[20px] ${collapsed ? 'px-3 py-[14px] justify-center' : 'px-4 py-[14px]'}
                     ${isActive
-                      ? "bg-brand-green text-white shadow-lg shadow-brand-green/20 border-[0.5px] border-white/10"
-                      : "text-white/70 hover:bg-white/10 hover:text-white border-[0.5px] border-transparent"
-                    }`}
-                  title={collapsed ? item.title : undefined}
-                >
-                  <Icon className="h-[22px] w-[22px] shrink-0" strokeWidth={1.8} />
-                  {!collapsed && <span className="truncate">{item.title}</span>}
-                </div>
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
+                        ? "bg-brand-green text-white shadow-lg shadow-brand-green/20 border-[0.5px] border-white/10"
+                        : "text-white/70 hover:bg-white/10 hover:text-white border-[0.5px] border-transparent"
+                      }`}
+                    title={collapsed ? item.title : undefined}
+                  >
+                    <Icon className="h-[22px] w-[22px] shrink-0" strokeWidth={1.8} />
+                    {!collapsed && <span className="truncate">{item.title}</span>}
+                  </div>
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
 
-      {/* Divider */}
-      <div className="h-px w-full opacity-20">
-        <div className="h-full w-full bg-gradient-to-r from-transparent via-red to-transparent" />
-      </div>
+        {/* Divider */}
+        <div className="h-px w-full opacity-20">
+          <div className="h-full w-full bg-gradient-to-r from-transparent via-red to-transparent" />
+        </div>
 
-      {/* Logout */}
-      <div className={`py-4 ${collapsed ? 'px-3' : 'px-5'}`}>
-        <button
-          onClick={() => setShowLogoutDialog(true)}
-          className={`flex items-center gap-4 w-full rounded-xl text-white/70 hover:bg-red-500/20 hover:text-red-300 transition-all duration-200 text-[14px] font-medium leading-[20px] ${collapsed ? 'px-3 py-[14px] justify-center' : 'px-4 py-[14px]'}`}
-          title={collapsed ? "Keluar" : undefined}
-        >
-          <LogOut className="h-[22px] w-[22px] shrink-0" strokeWidth={1.8} />
-          {!collapsed && "Keluar"}
-        </button>
-      </div>
-    </>
-  );
+        {/* Logout */}
+        <div className={`py-4 ${collapsed ? 'px-3' : 'px-5'}`}>
+          <button
+            onClick={() => setShowLogoutDialog(true)}
+            className={`flex items-center gap-4 w-full rounded-xl text-white/70 hover:bg-red-500/20 hover:text-red-300 transition-all duration-200 text-[14px] font-medium leading-[20px] ${collapsed ? 'px-3 py-[14px] justify-center' : 'px-4 py-[14px]'}`}
+            title={collapsed ? "Keluar" : undefined}
+          >
+            <LogOut className="h-[22px] w-[22px] shrink-0" strokeWidth={1.8} />
+            {!collapsed && "Keluar"}
+          </button>
+        </div>
+      </>
+    );
+  };
 
   return (
     <div
       className="flex min-h-screen w-full font-sans"
       style={{
-        backgroundImage: "url('/images/background_page10.png')",
+        backgroundImage: "url('/images/bgimage.png')",
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundAttachment: "fixed",
         backgroundRepeat: "no-repeat",
       }}
     >
-      
+
       {/* --- SIDEBAR (DESKTOP) --- */}
       <aside className={`hidden md:flex shrink-0 p-3 z-20 transition-all duration-300 ${isCollapsed ? 'w-[100px]' : 'w-[280px]'}`}>
-        <div className="relative w-full backdrop-blur-[80px] bg-primary/80 border-[0.5px] border-solid border-white/10 rounded-[28px] shadow-[0px_24px_64px_-16px_rgba(7,44,82,0.3)] flex flex-col">
+        <div className="relative w-full backdrop-blur-[80px] bg-primary/70 border-[0.5px] border-solid border-white/10 rounded-[28px] shadow-[0px_24px_64px_-16px_rgba(7,44,82,0.3)] flex flex-col">
           {/* Collapse Button */}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
@@ -222,14 +274,14 @@ export default function DashboardLayout() {
               <polyline points="15 18 9 12 15 6"></polyline>
             </svg>
           </button>
-          
+
           <SidebarContent collapsed={isCollapsed} />
         </div>
       </aside>
 
       {/* --- MAIN CONTENT AREA --- */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        
+
         {/* Mobile Header with Menu Button */}
         <header className="md:hidden sticky top-0 z-40 flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-md border-b border-slate-200/60">
           <Sheet>
@@ -251,6 +303,7 @@ export default function DashboardLayout() {
             </h1>
           </div>
           <Avatar className="h-8 w-8 border border-slate-200">
+            {getAvatarUrl(user?.profileImage) && <AvatarImage src={getAvatarUrl(user?.profileImage)!} alt={user?.fullName || "Avatar"} className="object-cover" />}
             <AvatarFallback className="bg-primary/10 text-primary font-bold text-sm font-poppins">
               {user?.fullName?.charAt(0).toUpperCase() || "U"}
             </AvatarFallback>

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { MulterModule } from '@nestjs/platform-express';
 import { UsersController } from './controllers/users.controller';
 import { GroupsController } from './controllers/groups.controller';
 import { UsersService } from './services/users.service';
@@ -7,6 +8,11 @@ import { UsersRepository } from './repositories/users.repository';
 import { GroupsRepository } from './repositories/groups.repository';
 
 @Module({
+  imports: [
+    MulterModule.register({
+      storage: undefined, // Uses memory storage by default (buffer)
+    }),
+  ],
   controllers: [UsersController, GroupsController],
   providers: [UsersService, GroupsService, UsersRepository, GroupsRepository],
   exports: [UsersService, GroupsService, UsersRepository, GroupsRepository],

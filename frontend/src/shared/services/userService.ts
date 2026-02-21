@@ -90,11 +90,11 @@ export const userService = {
     await api.patch("/users/change-password", data);
   },
 
-  /** Upload profile photo */
-  uploadFile: async (file: File): Promise<string> => {
+  /** Upload profile photo (avatar) */
+  uploadAvatar: async (file: File): Promise<UserItem> => {
     const formData = new FormData();
     formData.append("file", file);
-    const response = await api.post<ApiResponse<string>>("/storage/upload", formData, {
+    const response = await api.patch<ApiResponse<UserItem>>("/users/profile/avatar", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return response.data.data;

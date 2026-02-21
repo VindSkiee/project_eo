@@ -1,16 +1,9 @@
 import { Users, Pencil, Trash2 } from "lucide-react";
 import { Skeleton } from "@/shared/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 import type { UserItem } from "@/shared/types";
-
-const roleLabel = (role: string) => {
-  switch (role) {
-    case "LEADER": return "Ketua RW";
-    case "ADMIN": return "Ketua RT";
-    case "TREASURER": return "Bendahara";
-    case "RESIDENT": return "Warga";
-    default: return role || "Warga";
-  }
-};
+import { getRoleLabel } from "@/shared/helpers/roleLabel";
+import { getAvatarUrl } from "@/shared/helpers/avatarUrl";
 
 function sortMembers(members: UserItem[], currentUserId?: string): UserItem[] {
   const getPriority = (u: UserItem): number => {
@@ -95,11 +88,12 @@ export function RtMemberTable({
                 >
                   <td className="px-4 py-3 whitespace-nowrap text-left">
                     <div className="flex items-center gap-2">
-                      <div className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 ${isSelf ? "bg-gradient-to-br from-primary/20 to-primary/30" : "bg-gradient-to-br from-slate-100 to-slate-200"}`}>
-                        <span className={`text-xs font-medium ${isSelf ? "text-primary" : "text-slate-600"}`}>
+                      <Avatar className={`h-7 w-7 shrink-0 ${isSelf ? 'ring-2 ring-primary/30' : ''}`}>
+                        {getAvatarUrl(member.profileImage) && <AvatarImage src={getAvatarUrl(member.profileImage)!} alt={member.fullName} className="object-cover" />}
+                        <AvatarFallback className={`text-xs font-medium ${isSelf ? 'bg-primary/20 text-primary' : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600'}`}>
                           {member.fullName?.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
+                        </AvatarFallback>
+                      </Avatar>
                       <div className="min-w-0">
                         <p className={`transition-colors ${isSelf ? "font-bold text-primary" : "font-medium text-slate-700 group-hover:text-slate-900"}`}>
                           {member.fullName}
@@ -126,7 +120,7 @@ export function RtMemberTable({
                         }
                       `}
                     >
-                      {roleLabel((member.roleType || member.role?.type) ?? "RESIDENT")}
+                      {getRoleLabel((member.roleType || member.role?.type) ?? "RESIDENT")}
                     </span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-center">

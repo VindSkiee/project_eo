@@ -59,6 +59,9 @@ export class PaymentRepository {
   async findById(paymentId: string) {
     return this.prisma.paymentGatewayTx.findUnique({
       where: { id: paymentId },
+      include: {
+        user: { select: { fullName: true, email: true } },
+      },
     });
   }
 
@@ -72,9 +75,8 @@ export class PaymentRepository {
   // 👇 METHOD BARU: Untuk Admin/Bendahara melihat semua transaksi
   async findAll() {
     return this.prisma.paymentGatewayTx.findMany({
-      orderBy: { createdAt: 'desc' }, // Mengurutkan dari yang terbaru
-      // Tambahkan include jika Anda butuh relasi data user
-      // include: { user: { select: { fullName: true, email: true } } }
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { fullName: true, email: true } } },
     });
   }
 

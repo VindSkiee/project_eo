@@ -8,6 +8,7 @@ import { ArrowLeft, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { userService } from "@/shared/services/userService";
 import { financeService } from "@/features/finance/services/financeService";
+import { loadCustomRoleLabels, getRoleLabel } from "@/shared/helpers/roleLabel";
 import type { UserItem, Transaction } from "@/shared/types";
 import {
   UserProfileCard,
@@ -24,6 +25,7 @@ export default function UserDetailPage() {
   const [user, setUser] = useState<UserItem | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [resolvedRoleLabel, setResolvedRoleLabel] = useState("");
 
   const currentYear = new Date().getFullYear();
 
@@ -35,11 +37,17 @@ export default function UserDetailPage() {
   const fetchUser = async () => {
     setLoading(true);
     try {
+      // Ensure custom role labels are loaded before rendering
+      await loadCustomRoleLabels();
+
       const userData = await userService.getById(id!);
       setUser(userData);
+      // Store resolved label in state — same pattern as DashboardLayout
+      const resolvedType = userData.roleType || userData.role?.type || "";
+      setResolvedRoleLabel(getRoleLabel(resolvedType));
 
       // If RESIDENT, also fetch transactions
-      if (userData.roleType === "RESIDENT") {
+      if (resolvedType === "RESIDENT") {
         try {
           const txns = await financeService.getTransparencyHistory("RT");
           // Filter transactions that relate to this user (by description or contributorUserId)
@@ -57,7 +65,8 @@ export default function UserDetailPage() {
 
   // Determine which months have been paid (DUES/CREDIT transactions with the user's name)
   const paidMonths = new Set<number>();
-  if (user?.roleType === "RESIDENT") {
+  const userResolvedRole = user?.roleType || user?.role?.type || "";
+  if (userResolvedRole === "RESIDENT" && user) {
     transactions.forEach((tx) => {
       const txDate = new Date(tx.createdAt);
       if (
@@ -134,10 +143,10 @@ export default function UserDetailPage() {
       </Button>
 
       {/* Profile Header */}
-      <UserProfileCard user={user} />
+      <UserProfileCard user={user} roleLabel={resolvedRoleLabel} />
 
       {/* === RESIDENT-ONLY: Dues Grid & Transaction History === */}
-      {user.roleType === "RESIDENT" && (
+      {userResolvedRole === "RESIDENT" && (
         <>
           <DuesStatusGrid paidMonths={paidMonths} currentYear={currentYear} />
           <Separator />
@@ -146,8 +155,8 @@ export default function UserDetailPage() {
       )}
 
       {/* === NON-RESIDENT: Only profile info === */}
-      {user.roleType !== "RESIDENT" && (
-        <UserAdditionalInfo user={user} />
+      {userResolvedRole !== "RESIDENT" && (
+        <UserAdditionalInfo user={user} roleLabel={resolvedRoleLabel} />
       )}
     </div>
   );

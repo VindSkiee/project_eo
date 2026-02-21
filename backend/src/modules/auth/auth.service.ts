@@ -43,6 +43,7 @@ export class AuthService {
         fullName: user.fullName,
         email: user.email,
         role: user.role.type,
+        profileImage: user.profileImage,
         communityGroupId: user.communityGroupId,
       },
     };

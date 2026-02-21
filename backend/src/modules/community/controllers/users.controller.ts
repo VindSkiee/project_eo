@@ -8,7 +8,11 @@ import {
   Delete,
   Query,
   ParseIntPipe,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { SystemRoleType } from '@prisma/client';
 
 // Services & DTOs
@@ -54,6 +58,18 @@ export class UsersController {
     @Body() updateProfileDto: UpdateProfileDto
   ) {
     return this.usersService.updateProfile(user.id, updateProfileDto);
+  }
+
+  @Patch('profile/avatar')
+  @UseInterceptors(FileInterceptor('file', {
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  }))
+  async uploadAvatar(
+    @ActiveUser() user: ActiveUserData,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('File wajib diupload');
+    return this.usersService.uploadAvatar(user.id, file);
   }
 
   @Patch('change-password')

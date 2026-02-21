@@ -1,28 +1,38 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
-import { Avatar, AvatarFallback } from "@/shared/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 import { Mail, Phone, MapPin, Building2 } from "lucide-react";
 import type { UserItem } from "@/shared/types";
-
-const roleLabel = (roleType: string) => {
-  switch (roleType) {
-    case "LEADER": return "Ketua RW";
-    case "ADMIN": return "Ketua RT";
-    case "TREASURER": return "Bendahara";
-    default: return "Warga";
-  }
-};
+import { getRoleLabel, loadCustomRoleLabels } from "@/shared/helpers/roleLabel";
+import { getAvatarUrl } from "@/shared/helpers/avatarUrl";
 
 interface UserProfileCardProps {
   user: UserItem;
+  roleLabel?: string;
 }
 
-export function UserProfileCard({ user }: UserProfileCardProps) {
+export function UserProfileCard({ user, roleLabel }: UserProfileCardProps) {
+  const avatarUrl = getAvatarUrl(user.profileImage);
+  const resolvedRoleType = user.roleType || user.role?.type || "";
+  // Load custom labels and store in state so re-render fires after fetch
+  const [displayRole, setDisplayRole] = useState(roleLabel || getRoleLabel(resolvedRoleType));
+
+  useEffect(() => {
+    if (roleLabel) {
+      setDisplayRole(roleLabel);
+      return;
+    }
+    loadCustomRoleLabels().then(() => {
+      setDisplayRole(getRoleLabel(resolvedRoleType));
+    });
+  }, [resolvedRoleType, roleLabel]);
   return (
     <Card>
       <CardContent className="py-6 sm:py-8">
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
           <Avatar className="h-20 w-20 border-2 border-primary/10 shadow-md">
+            {avatarUrl && <AvatarImage src={avatarUrl} alt={user.fullName} className="object-cover" />}
             <AvatarFallback className="bg-primary/5 text-primary font-bold text-2xl font-poppins">
               {user.fullName?.charAt(0).toUpperCase() || "U"}
             </AvatarFallback>
@@ -37,7 +47,7 @@ export function UserProfileCard({ user }: UserProfileCardProps) {
                 <Badge
                   variant={user.roleType === "LEADER" ? "default" : user.roleType === "ADMIN" ? "secondary" : "outline"}
                 >
-                  {roleLabel(user.roleType)}
+                  {displayRole}
                 </Badge>
                 <Badge variant={user.isActive ? "default" : "destructive"} className="text-[10px]">
                   {user.isActive ? "Aktif" : "Nonaktif"}

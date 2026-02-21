@@ -6,6 +6,7 @@ export interface UserItem {
   fullName: string;
   phone: string | null;
   address: string | null;
+  profileImage: string | null;
   isActive: boolean;
   roleType: string;
   role?: { type: string };

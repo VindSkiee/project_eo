@@ -21,7 +21,6 @@ import {
 import {
   CreditCard,
   Search,
-  Receipt,
   Wallet,
   CheckCircle2,
   Clock,
@@ -39,6 +38,8 @@ import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
 import { paymentService } from "@/features/payment/services/paymentService";
 import type { MyBill, PaymentItem } from "@/shared/types";
+import { DateRangeFilter } from "@/shared/components/DateRangeFilter";
+import type { DateRange } from "@/shared/components/DateRangeFilter";
 
 // === HELPERS ===
 
@@ -154,6 +155,7 @@ export default function ResidentPaymentPage() {
   const [paying, setPaying] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [selectedMonthCount, setSelectedMonthCount] = useState(1);
   const payingRef = useRef(false); // Prevent double-click
@@ -309,11 +311,25 @@ export default function ResidentPaymentPage() {
   const paidCount = payments.filter((p) => p.status === "PAID").length;
   const totalPaid = payments.filter((p) => p.status === "PAID").reduce((s, p) => s + Number(p.amount), 0);
 
-  const filteredPayments = payments.filter(
-    (p) =>
+  const filteredPayments = payments.filter((p) => {
+    const matchSearch =
       p.orderId.toLowerCase().includes(search.toLowerCase()) ||
-      p.status.toLowerCase().includes(search.toLowerCase())
-  );
+      p.status.toLowerCase().includes(search.toLowerCase());
+    if (!matchSearch) return false;
+    if (dateRange?.from) {
+      const d = new Date(p.createdAt);
+      d.setHours(0, 0, 0, 0);
+      const from = new Date(dateRange.from);
+      from.setHours(0, 0, 0, 0);
+      if (d < from) return false;
+      if (dateRange.to) {
+        const to = new Date(dateRange.to);
+        to.setHours(23, 59, 59, 999);
+        if (d > to) return false;
+      }
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -580,14 +596,21 @@ export default function ResidentPaymentPage() {
       <div>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 className="text-lg font-semibold text-slate-800 font-poppins">Riwayat Pembayaran</h2>
-          <div className="relative max-w-sm w-full sm:w-auto">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Cari order ID atau status..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-10"
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <DateRangeFilter
+              value={dateRange}
+              onChange={setDateRange}
+              placeholder="Filter tanggal"
             />
+            <div className="relative max-w-sm w-full sm:w-auto">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Cari order ID atau status..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 h-10"
+              />
+            </div>
           </div>
         </div>
 

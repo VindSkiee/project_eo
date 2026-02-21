@@ -1,20 +1,26 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import type { UserItem } from "@/shared/types";
-
-const roleLabel = (roleType: string) => {
-  switch (roleType) {
-    case "LEADER": return "Ketua RW";
-    case "ADMIN": return "Ketua RT";
-    case "TREASURER": return "Bendahara";
-    default: return "Warga";
-  }
-};
+import { getRoleLabel, loadCustomRoleLabels } from "@/shared/helpers/roleLabel";
 
 interface UserAdditionalInfoProps {
   user: UserItem;
+  roleLabel?: string;
 }
 
-export function UserAdditionalInfo({ user }: UserAdditionalInfoProps) {
+export function UserAdditionalInfo({ user, roleLabel }: UserAdditionalInfoProps) {
+  const resolvedRoleType = user.roleType || user.role?.type || "";
+  const [displayRole, setDisplayRole] = useState(roleLabel || getRoleLabel(resolvedRoleType));
+
+  useEffect(() => {
+    if (roleLabel) {
+      setDisplayRole(roleLabel);
+      return;
+    }
+    loadCustomRoleLabels().then(() => {
+      setDisplayRole(getRoleLabel(resolvedRoleType));
+    });
+  }, [resolvedRoleType, roleLabel]);
   return (
     <Card>
       <CardHeader>
@@ -28,7 +34,7 @@ export function UserAdditionalInfo({ user }: UserAdditionalInfoProps) {
           </div>
           <div>
             <p className="text-slate-500 text-xs mb-0.5">Role</p>
-            <p className="font-medium text-slate-900">{roleLabel(user.roleType)}</p>
+            <p className="font-medium text-slate-900">{displayRole}</p>
           </div>
           <div>
             <p className="text-slate-500 text-xs mb-0.5">Telepon</p>

@@ -25,6 +25,9 @@ import {
 import { toast } from "sonner";
 import { groupService } from "@/features/organization/services/groupService";
 import { userService } from "@/shared/services/userService";
+import { getRoleLabel } from "@/shared/helpers/roleLabel";
+import { getAvatarUrl } from "@/shared/helpers/avatarUrl";
+import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 import type { GroupItem, UserItem, HierarchyData } from "@/shared/types";
 import {
   OrganizationSummaryCards,
@@ -529,7 +532,7 @@ function ResidentView({ navigate, userGroupId }: { navigate: ReturnType<typeof u
     <div className="space-y-6 animate-in fade-in duration-500">
       <OrgHeader subtitle="Lihat struktur organisasi RT/RW Anda." />
       {loading ? <Skeleton className="h-24 w-full rounded-xl" /> : hierarchy?.rw && (
-        <RwInfoCard rw={hierarchy.rw} rtCount={hierarchy.rtGroups.length} />
+        <RwInfoCard rw={hierarchy.rw} rtCount={hierarchy.rtGroups.length} navigate={navigate} clickableOfficers />
       )}
       {loading ? <LoadingSkeletons /> : (
         <div className="space-y-3">
@@ -568,7 +571,7 @@ function ResidentView({ navigate, userGroupId }: { navigate: ReturnType<typeof u
                           <OfficerBadge label="Bendahara RT" officer={rt.treasurer} />
                         </div>
                         {isOwn ? (
-                          <ReadOnlyMemberTable members={members} loading={isLoadingThisRT} navigate={navigate} currentUserId={currentUserId || undefined} />
+                          <ReadOnlyMemberTable members={members} loading={isLoadingThisRT} navigate={navigate} showDetail currentUserId={currentUserId || undefined} />
                         ) : (
                           <p className="text-xs text-slate-400 text-center py-2">Hanya dapat melihat anggota RT Anda sendiri.</p>
                         )}
@@ -653,16 +656,6 @@ function OfficerBadge({ label, officer, clickable, onClick }: {
   );
 }
 
-const roleLabel = (role: string) => {
-  switch (role) {
-    case "LEADER": return "Ketua RW";
-    case "ADMIN": return "Ketua RT";
-    case "TREASURER": return "Bendahara";
-    case "RESIDENT": return "Warga";
-    default: return role || "Warga";
-  }
-};
-
 function ReadOnlyMemberTable({ members, loading, navigate, showDetail, currentUserId }: {
   members: UserItem[];
   loading: boolean;
@@ -736,11 +729,12 @@ function ReadOnlyMemberTable({ members, loading, navigate, showDetail, currentUs
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-left">
                     <div className="flex items-center gap-2">
-                      <div className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 bg-gradient-to-br from-slate-100 to-slate-200">
-                        <span className="text-xs font-medium text-slate-600">
+                      <Avatar className={`h-7 w-7 shrink-0 ${isSelf ? 'ring-2 ring-primary/30' : ''}`}>
+                        {getAvatarUrl(m.profileImage) && <AvatarImage src={getAvatarUrl(m.profileImage)!} alt={m.fullName} className="object-cover" />}
+                        <AvatarFallback className={`text-xs font-medium ${isSelf ? 'bg-primary/20 text-primary' : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600'}`}>
                           {m.fullName?.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
+                        </AvatarFallback>
+                      </Avatar>
                       <div className="min-w-0">
                         <p className="font-medium text-slate-700 group-hover:text-slate-900 transition-colors">
                           {m.fullName}
@@ -771,7 +765,7 @@ function ReadOnlyMemberTable({ members, loading, navigate, showDetail, currentUs
                         }
                       `}
                     >
-                      {roleLabel(roleType)}
+                      {getRoleLabel(roleType)}
                     </span>
                   </td>
                 </tr>
