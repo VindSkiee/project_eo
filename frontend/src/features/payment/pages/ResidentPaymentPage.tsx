@@ -40,6 +40,7 @@ import { paymentService } from "@/features/payment/services/paymentService";
 import type { MyBill, PaymentItem } from "@/shared/types";
 import { DateRangeFilter } from "@/shared/components/DateRangeFilter";
 import type { DateRange } from "@/shared/components/DateRangeFilter";
+import { AnimatedNumber } from "../components";
 
 // === HELPERS ===
 
@@ -190,7 +191,7 @@ export default function ResidentPaymentPage() {
     };
     init();
     // Preload Midtrans Snap
-    loadMidtransSnap().catch(() => {});
+    loadMidtransSnap().catch(() => { });
   }, [fetchBill, fetchPayments]);
 
   // Reset month selection whenever bill data changes
@@ -201,14 +202,14 @@ export default function ResidentPaymentPage() {
   // Daftar bulan Jan–Des tahun tagihan — capped ke Desember (tidak melewati tahun ini)
   const monthGrid = useMemo(() => {
     const startMonth = bill?.nextBillMonth ?? (new Date().getMonth() + 1);
-    const year       = bill?.nextBillYear  ?? new Date().getFullYear();
+    const year = bill?.nextBillYear ?? new Date().getFullYear();
     // Jumlah bulan yang bisa dipilih maksimal sampai Desember
     const maxSelectable = 12 - startMonth + 1; // 1 = hanya bulan ini, dst.
     return {
       months: Array.from({ length: 12 }, (_, i) => {
-        const m      = i + 1; // 1-12
+        const m = i + 1; // 1-12
         const offset = m - startMonth; // <0=paid, 0=locked, >0=selectable
-        const state  = offset < 0 ? "paid" : offset === 0 ? "locked" : "selectable";
+        const state = offset < 0 ? "paid" : offset === 0 ? "locked" : "selectable";
         const isChecked = state !== "paid" && offset < selectedMonthCount;
         return { month: m, year, label: MONTH_NAMES_ID[i], short: MONTH_SHORT_ID[i], state, offset, isChecked };
       }),
@@ -347,7 +348,7 @@ export default function ResidentPaymentPage() {
       {loading ? (
         <Skeleton className="h-52 w-full rounded-xl" />
       ) : hasUnpaidBill ? (
-        <Card className="rounded-xl shadow-sm bg-slate-100 border border-black">
+        <Card className="rounded-xl shadow-sm bg-slate-100 ">
           <div className="bg-slate-100 p-6 sm:p-8">
             <div className="flex items-center gap-2 mb-4">
               <p className="text-sm sm:text-base font-semibold text-slate-700 uppercase tracking-wide">Nota Tagihan Iuran</p>
@@ -373,7 +374,7 @@ export default function ResidentPaymentPage() {
             {!hasPendingPayment && (
               <div className="bg-slate-200 border border-slate-100 rounded-lg p-4 mb-4">
                 <div className="flex items-center justify-center mb-7 mt-7">
-                  <p className="text-sm text-center font-semibold text-slate-700 uppercase tracking-widest">
+                  <p className="text-[10px] sm:text-sm text-center font-semibold text-slate-700 uppercase tracking-widest">
                     Pilih bulan yang ingin dibayar
                   </p>
                 </div>
@@ -390,32 +391,29 @@ export default function ResidentPaymentPage() {
                             disabled={m.state === "paid" || m.state === "locked"}
                             onClick={() => handleMonthToggle(m.month)}
                             aria-pressed={m.isChecked}
-                            aria-label={`${
-                              m.state === "paid" ? "Lunas" :
-                              m.state === "locked" ? "Wajib" : m.isChecked ? "Dipilih" : "Pilih"
-                            } ${m.label}`}
+                            aria-label={`${m.state === "paid" ? "Lunas" :
+                                m.state === "locked" ? "Wajib" : m.isChecked ? "Dipilih" : "Pilih"
+                              } ${m.label}`}
                             className={`flex flex-col items-center gap-1 px-3 py-2 sm:px-2.5 rounded-lg
                               transition-all duration-150 select-none min-w-[56px] sm:min-w-[52px]
-                              ${
-                                m.state === "paid"
-                                  ? "cursor-default text-slate-600"
-                                  : m.state === "locked"
+                              ${m.state === "paid"
+                                ? "cursor-default text-slate-600"
+                                : m.state === "locked"
                                   ? "cursor-default text-black"
                                   : m.isChecked
-                                  ? "cursor-pointer text-black hover:bg-emerald-500/10"
-                                  : "cursor-pointer text-slate-400 hover:text-black"
+                                    ? "cursor-pointer text-black hover:bg-emerald-500/10"
+                                    : "cursor-pointer text-slate-400 hover:text-black"
                               }`}
                           >
                             {/* Checkbox ring */}
-                            <span className={`h-6 w-6 sm:h-5 sm:w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all
-                              ${
-                                m.state === "paid"
-                                  ? "border-slate-600 bg-slate-700/50"
-                                  : m.state === "locked"
+                            <span className={`h-6 w-6 sm:h-7 sm:w-7 rounded-full border-2 flex items-center justify-center shrink-0 transition-all
+                              ${m.state === "paid"
+                                ? "border-slate-600 bg-slate-700/50"
+                                : m.state === "locked"
                                   ? "border-amber-400 bg-amber-400"
                                   : m.isChecked
-                                  ? "border-emerald-500 bg-emerald-500"
-                                  : "border-slate-500 bg-transparent"
+                                    ? "border-emerald-500 bg-emerald-500"
+                                    : "border-slate-500 bg-transparent"
                               }`}
                             >
                               {(m.state === "paid" || m.state === "locked" || m.isChecked) && (
@@ -424,11 +422,11 @@ export default function ResidentPaymentPage() {
                             </span>
 
                             {/* Short month name */}
-                            <span className="text-xs sm:text-[11px] font-medium leading-none">{m.short}</span>
+                            <span className="text-xs sm:text-[12px] font-medium leading-none">{m.short}</span>
 
                             {/* Badge */}
                             {m.state === "locked" && (
-                              <span className="text-[8px] text-black leading-none">wajib</span>
+                              <span className="text-[10px] text-amber-400 leading-none">wajib</span>
                             )}
                             {m.state === "paid" && (
                               <span className="text-[8px] text-slate-600 leading-none">lunas</span>
@@ -438,10 +436,9 @@ export default function ResidentPaymentPage() {
                           {/* Connector line between months */}
                           {!isLast && (
                             <div className={`h-0.5 w-3 shrink-0 rounded-full transition-colors
-                              ${
-                                m.isChecked && monthGrid.months[idx + 1].isChecked
-                                  ? "bg-emerald-500"
-                                  : m.state === "paid" && (monthGrid.months[idx + 1].state === "paid" || monthGrid.months[idx + 1].state === "locked")
+                              ${m.isChecked && monthGrid.months[idx + 1].isChecked
+                                ? "bg-emerald-500"
+                                : m.state === "paid" && (monthGrid.months[idx + 1].state === "paid" || monthGrid.months[idx + 1].state === "locked")
                                   ? "bg-slate-700"
                                   : "bg-white/10"
                               }`}
@@ -470,8 +467,11 @@ export default function ResidentPaymentPage() {
                       </p>
                     )}
                   </div>
-                  <p className="text-xl sm:text-2xl font-bold text-emerald-500 font-poppins">
-                    {formatRupiah(bill!.totalAmount * selectedMonthCount)}
+                  <p className="text-xl sm:text-2xl font-bold text-black font-poppins">
+                    <AnimatedNumber
+                      value={bill!.totalAmount * selectedMonthCount}
+                      formatter={formatRupiah}
+                    />
                   </p>
                 </div>
               </div>
@@ -683,8 +683,8 @@ export default function ResidentPaymentPage() {
               {hasPendingPayment
                 ? "Lanjutkan Pembayaran"
                 : selectedMonthCount > 1
-                ? `Konfirmasi Pembayaran ${selectedMonthCount} Bulan`
-                : "Konfirmasi Pembayaran"}
+                  ? `Konfirmasi Pembayaran ${selectedMonthCount} Bulan`
+                  : "Konfirmasi Pembayaran"}
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-3">
               {hasPendingPayment ? (

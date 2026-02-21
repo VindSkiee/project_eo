@@ -60,7 +60,7 @@ export default function TransactionDetailPage() {
   const fetchDetail = async () => {
     setLoading(true);
     try {
-      const data = await financeService.getTransactionDetail(Number(id));
+      const data = await financeService.getTransactionDetail(id!);
       setDetail(data);
     } catch {
       toast.error("Gagal memuat detail transaksi.");
@@ -202,7 +202,7 @@ export default function TransactionDetailPage() {
                 <div>
                   <p className="text-xs text-slate-400">Grup</p>
                   <p className="text-sm font-medium text-slate-900">
-                    {detail.wallet.communityGroup.name}
+                    {detail.group.name}
                   </p>
                 </div>
               </div>

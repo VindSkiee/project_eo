@@ -70,7 +70,7 @@ export const financeService = {
   },
 
   /** Get single transaction detail */
-  getTransactionDetail: async (id: number): Promise<TransactionDetail> => {
+  getTransactionDetail: async (id: string): Promise<TransactionDetail> => {
     const response = await api.get<ApiResponse<TransactionDetail>>(`/finance/transactions/${id}`);
     return response.data.data;
   },

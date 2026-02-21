@@ -24,7 +24,7 @@ export interface WalletDetail {
 }
 
 export interface Transaction {
-  id: number;
+  id: string;
   amount: number;
   type: string;
   description: string;
@@ -150,15 +150,12 @@ export interface GroupFinanceDetail {
 // === Transaction Detail ===
 
 export interface TransactionDetail {
-  id: number;
+  id: string;
   amount: number;
   type: string;
   description: string;
   createdAt: string;
-  wallet: {
-    id: number;
-    communityGroup: { id: number; name: string; type: string };
-  };
+  group: { id: number; name: string; type: string };
   createdBy: { id: string; fullName: string; email: string } | null;
   event: { id: string; title: string } | null;
   contribution: {
