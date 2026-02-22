@@ -38,6 +38,8 @@ import {
   RtMemberTable,
   WargaTable,
 } from "@/features/organization/components";
+import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
+
 
 // === HELPERS ===
 
@@ -106,6 +108,8 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
   const [rtMembers, setRtMembers] = useState<Record<number, UserItem[]>>({});
   const [rtMemberCounts, setRtMemberCounts] = useState<Record<number, number>>({});
   const [loadingMembers, setLoadingMembers] = useState<number | null>(null);
+  const [pendingDeleteGroup, setPendingDeleteGroup] = useState<{ id: number; name: string } | null>(null);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -164,14 +168,22 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
     });
   };
 
-  const handleDeleteGroup = async (id: number, name: string) => {
-    if (!confirm(`Yakin ingin menghapus ${name}?`)) return;
-    try { await groupService.delete(id); toast.success(`${name} berhasil dihapus.`); fetchData(); } catch { toast.error("Gagal menghapus grup."); }
+  const handleDeleteGroup = (id: number, name: string) => {
+    setPendingDeleteGroup({ id, name });
   };
 
-  const handleDeleteUser = async (id: string, name: string) => {
-    if (!confirm(`Yakin ingin menghapus ${name}?`)) return;
-    try { await userService.delete(id); toast.success(`${name} berhasil dihapus.`); fetchData(); } catch { toast.error("Gagal menghapus warga."); }
+  const executeDeleteGroup = async () => {
+    if (!pendingDeleteGroup) return;
+    try { await groupService.delete(pendingDeleteGroup.id); toast.success(`${pendingDeleteGroup.name} berhasil dihapus.`); setPendingDeleteGroup(null); fetchData(); } catch { toast.error("Gagal menghapus grup."); }
+  };
+
+  const handleDeleteUser = (id: string, name: string) => {
+    setPendingDeleteUser({ id, name });
+  };
+
+  const executeDeleteUser = async () => {
+    if (!pendingDeleteUser) return;
+    try { await userService.delete(pendingDeleteUser.id); toast.success(`${pendingDeleteUser.name} berhasil dihapus.`); setPendingDeleteUser(null); fetchData(); } catch { toast.error("Gagal menghapus warga."); }
   };
 
   return (
@@ -252,6 +264,24 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
       <EditWargaDialog user={editingUser} groups={groups} form={editUserForm} onFormChange={setEditUserForm} onClose={() => setEditingUser(null)}
         onSuccess={() => { setEditingUser(null); fetchData(); setRtMembers({}); }}
         submitting={submitting} setSubmitting={setSubmitting} />
+
+      <ConfirmDialog
+        open={!!pendingDeleteGroup}
+        onOpenChange={(v) => { if (!v) setPendingDeleteGroup(null); }}
+        title="Hapus RT"
+        description={`Yakin ingin menghapus ${pendingDeleteGroup?.name}? Semua data warga dan anggota terkait akan ikut terhapus.`}
+        confirmLabel="Ya, Hapus"
+        onConfirm={executeDeleteGroup}
+      />
+
+      <ConfirmDialog
+        open={!!pendingDeleteUser}
+        onOpenChange={(v) => { if (!v) setPendingDeleteUser(null); }}
+        title="Hapus Warga"
+        description={`Yakin ingin menghapus ${pendingDeleteUser?.name}? Aksi ini tidak dapat dibatalkan.`}
+        confirmLabel="Ya, Hapus"
+        onConfirm={executeDeleteUser}
+      />
     </div>
   );
 }
@@ -430,7 +460,7 @@ function AdminView({ navigate, userGroupId }: { navigate: ReturnType<typeof useN
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"} ${isOwn ? "text-primary" : "text-slate-400"}`} />
                         <div className="min-w-0">
-                            <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2">
                             <p className={`font-medium text-sm sm:text-base ${isOwn ? "text-primary" : "text-slate-900"}`}>{rt.name}</p>
                             {isOwn && <Badge variant="default" className="text-[10px] bg-slate-100 text-slate-700 transition-colors group-hover:bg-primary group-hover:text-white">RT Anda</Badge>}
                           </div>
@@ -545,13 +575,13 @@ function ResidentView({ navigate, userGroupId }: { navigate: ReturnType<typeof u
               const isLoadingThisRT = loadingMembers === rt.id;
               return (
                 <Collapsible key={rt.id} open={isExpanded} onOpenChange={() => toggleRT(rt.id)}>
-                  <Card className={`group overflow-hidden transition-shadow ${isOwn ? "border-slate-100 shadow-sm hover:shadow-md hover:border-primary/40 transition-all duration-400"  : "border-slate-100 shadow-sm hover:shadow-md"}`}>
+                  <Card className={`group overflow-hidden transition-shadow ${isOwn ? "border-slate-100 shadow-sm hover:shadow-md hover:border-primary/40 transition-all duration-400" : "border-slate-100 shadow-sm hover:shadow-md"}`}>
                     <CollapsibleTrigger asChild>
                       <div className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${isOwn ? "hover:bg-slate-50/80" : "hover:bg-slate-50/80"}`}>
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"} ${isOwn ? "text-primary" : "text-slate-400"}`} />
                           <div className="min-w-0">
-                              <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2">
                               <p className={`font-medium text-sm sm:text-base ${isOwn ? "text-primary" : "text-slate-900"}`}>{rt.name}</p>
                               {isOwn && <Badge variant="default" className="text-[10px] bg-slate-100 text-slate-700 transition-colors duration-400 group-hover:bg-primary group-hover:text-white">RT Anda</Badge>}
                             </div>
@@ -633,24 +663,57 @@ function RwInfoCard({ rw, rtCount, navigate, clickableOfficers }: {
 }
 
 function OfficerBadge({ label, officer, clickable, onClick }: {
+  
   label: string;
-  officer: { id: string; fullName: string; email: string; phone?: string | null } | null;
+  // Tambahkan profileImage ke tipe data officer
+  officer: { id: string; fullName: string; email: string; phone?: string | null; profileImage?: string | null } | null;
   clickable?: boolean;
   onClick?: () => void;
 }) {
   return (
     <div
-      className={`rounded-lg border border-slate-100 bg-white p-3 ${clickable && officer ? "cursor-pointer hover:border-primary/30 hover:bg-primary/5 transition-colors" : ""}`}
+      className={`rounded-lg border border-slate-100 bg-white p-3 flex flex-col ${
+        clickable && officer ? "cursor-pointer hover:border-primary/30 hover:bg-primary/5 transition-colors" : ""
+      }`}
       onClick={clickable && officer ? onClick : undefined}
     >
-      <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">{label}</p>
+      <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium mb-2.5">
+        {label}
+      </p>
+      
       {officer ? (
-        <>
-          <p className="text-sm font-semibold text-slate-900 mt-0.5">{officer.fullName}</p>
-          <p className="text-xs text-slate-500">{officer.email}</p>
-        </>
+        <div className="flex items-center gap-3">
+          {/* Implementasi Avatar yang sama dengan RtMemberTable */}
+          <Avatar className="h-9 w-9 shrink-0 ring-1 ring-slate-100">
+            {getAvatarUrl(officer.profileImage) && (
+              <AvatarImage 
+                src={getAvatarUrl(officer.profileImage)!} 
+                alt={officer.fullName} 
+                className="object-cover" 
+              />
+            )}
+            <AvatarFallback className="text-sm font-medium bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600">
+              {officer.fullName?.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-slate-900 truncate">
+              {officer.fullName}
+            </p>
+            <p className="text-xs text-slate-500 truncate">
+              {officer.email}
+            </p>
+          </div>
+        </div>
       ) : (
-        <p className="text-sm text-slate-400 mt-0.5">Belum ditentukan</p>
+        /* State Kosong (Belum ditentukan) */
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+            <Users className="h-4 w-4 text-slate-300" />
+          </div>
+          <p className="text-sm text-slate-400 mt-0.5">Belum ditentukan</p>
+        </div>
       )}
     </div>
   );
@@ -754,14 +817,13 @@ function ReadOnlyMemberTable({ members, loading, navigate, showDetail, currentUs
                     <span
                       className={`
                         inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                        ${
-                          roleType === "LEADER"
-                            ? "bg-indigo-50 text-indigo-700"
-                            : roleType === "ADMIN"
+                        ${roleType === "LEADER"
+                          ? "bg-indigo-50 text-indigo-700"
+                          : roleType === "ADMIN"
                             ? "bg-blue-50 text-blue-700"
                             : roleType === "TREASURER"
-                            ? "bg-amber-50 text-amber-700"
-                            : "bg-slate-50 text-slate-600"
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-slate-50 text-slate-600"
                         }
                       `}
                     >

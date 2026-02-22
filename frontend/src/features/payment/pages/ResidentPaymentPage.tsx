@@ -160,6 +160,7 @@ export default function ResidentPaymentPage() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [selectedMonthCount, setSelectedMonthCount] = useState(1);
   const payingRef = useRef(false); // Prevent double-click
+  const [filterTab, setFilterTab] = useState<"today" | "all">("today");
 
   const fetchBill = useCallback(async () => {
     try {
@@ -313,12 +314,31 @@ export default function ResidentPaymentPage() {
   const totalPaid = payments.filter((p) => p.status === "PAID").reduce((s, p) => s + Number(p.amount), 0);
 
   const filteredPayments = payments.filter((p) => {
+    // 1. Cek Pencarian Teks
     const matchSearch =
       p.orderId.toLowerCase().includes(search.toLowerCase()) ||
       p.status.toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;
+
+    const paymentDate = new Date(p.createdAt);
+
+    // 2. Cek Filter Tab ("today" vs "all")
+    if (filterTab === "today") {
+      const today = new Date();
+      // Pastikan tahun, bulan, dan tanggal sama
+      if (
+        paymentDate.getDate() !== today.getDate() ||
+        paymentDate.getMonth() !== today.getMonth() ||
+        paymentDate.getFullYear() !== today.getFullYear()
+      ) {
+        return false;
+      }
+    }
+
+    // 3. Cek DateRange (Jika pengguna memilih tanggal spesifik dari kalender)
+    // DateRange ini akan tetap jalan meskipun tab-nya "all"
     if (dateRange?.from) {
-      const d = new Date(p.createdAt);
+      const d = new Date(paymentDate);
       d.setHours(0, 0, 0, 0);
       const from = new Date(dateRange.from);
       from.setHours(0, 0, 0, 0);
@@ -392,7 +412,7 @@ export default function ResidentPaymentPage() {
                             onClick={() => handleMonthToggle(m.month)}
                             aria-pressed={m.isChecked}
                             aria-label={`${m.state === "paid" ? "Lunas" :
-                                m.state === "locked" ? "Wajib" : m.isChecked ? "Dipilih" : "Pilih"
+                              m.state === "locked" ? "Wajib" : m.isChecked ? "Dipilih" : "Pilih"
                               } ${m.label}`}
                             className={`flex flex-col items-center gap-1 px-3 py-2 sm:px-2.5 rounded-lg
                               transition-all duration-150 select-none min-w-[56px] sm:min-w-[52px]
@@ -484,24 +504,34 @@ export default function ResidentPaymentPage() {
 
             {/* Pending Payment Warning */}
             {hasPendingPayment && (
-              <div className="flex flex-col gap-2 bg-amber-500/20 border border-amber-400/30 rounded-lg p-3 mb-4">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-300 shrink-0" />
-                  <div className="text-xs text-amber-200">
-                    <p className="font-medium">Ada pembayaran yang belum selesai</p>
-                    <p className="mt-0.5 text-amber-300/80">Sudah bayar tapi status masih pending? Klik "Cek Status" untuk memperbarui.</p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 shadow-sm">
+
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" strokeWidth={2.5} />
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-semibold text-amber-900 font-poppins">
+                      Ada pembayaran yang belum selesai
+                    </p>
+                    <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+                      Sudah bayar tapi status masih pending? Klik tombol untuk memperbarui.
+                    </p>
                   </div>
                 </div>
+
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full border-amber-400/50 text-amber-200 hover:bg-amber-500/20 hover:text-amber-100 bg-transparent"
+                  className="w-full sm:w-auto shrink-0 bg-white border-amber-300 text-amber-700 hover:bg-amber-100 hover:text-amber-900 transition-colors shadow-sm"
                   onClick={handleSyncPending}
                   disabled={syncing}
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
-                  {syncing ? "Mengecek status..." : "Cek Status Pembayaran"}
+                  <RefreshCw className={`h-3.5 w-3.5 mr-2 ${syncing ? "animate-spin" : ""}`} />
+                  {syncing ? "Mengecek..." : "Cek Status"}
                 </Button>
+
               </div>
             )}
 
@@ -593,22 +623,56 @@ export default function ResidentPaymentPage() {
       </div>
 
       {/* === PAYMENT HISTORY === */}
+      {/* === PAYMENT HISTORY === */}
       <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <h2 className="text-lg font-semibold text-slate-800 font-poppins">Riwayat Pembayaran</h2>
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <DateRangeFilter
-              value={dateRange}
-              onChange={setDateRange}
-              placeholder="Filter tanggal"
-            />
-            <div className="relative max-w-sm w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-5">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 font-poppins">Riwayat Pembayaran</h2>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {filterTab === "today"
+                ? "Menampilkan transaksi yang dilakukan hari ini."
+                : "Menampilkan seluruh riwayat transaksi Anda."}
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+            {/* Tabs Pilihan */}
+            <div className="flex bg-slate-100 p-1 rounded-lg w-full sm:w-auto shrink-0">
+              <button
+                onClick={() => {
+                  setFilterTab("today");
+                  setDateRange(undefined); // Reset kalender saat ganti tab
+                }}
+                className={`flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${filterTab === "today" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                  }`}
+              >
+                Hari Ini
+              </button>
+              <button
+                onClick={() => setFilterTab("all")}
+                className={`flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${filterTab === "all" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                  }`}
+              >
+                Semua
+              </button>
+            </div>
+
+            {/* Filter Tanggal Khusus (Hanya muncul jika tab "Semua" dipilih) */}
+            {filterTab === "all" && (
+              <DateRangeFilter
+                value={dateRange}
+                onChange={setDateRange}
+                placeholder="Filter tanggal"
+              />
+            )}
+
+            <div className="relative w-full sm:w-64 shrink-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Cari order ID atau status..."
+                placeholder="Cari Order ID..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 h-10"
+                className="pl-9 h-10 w-full"
               />
             </div>
           </div>
@@ -619,53 +683,77 @@ export default function ResidentPaymentPage() {
             {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
           </div>
         ) : filteredPayments.length === 0 ? (
-          <Card className="border-dashed">
+          <Card className="border-dashed shadow-none bg-slate-50/50">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-              <CreditCard className="h-10 w-10 text-slate-300 mb-3" />
-              <p className="text-sm font-medium text-slate-500">
-                {search ? "Pembayaran tidak ditemukan" : "Belum ada riwayat pembayaran"}
+              <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                <FileText className="h-6 w-6 text-slate-300" />
+              </div>
+              <p className="text-sm font-medium text-slate-600">
+                {search || dateRange
+                  ? "Pembayaran tidak ditemukan"
+                  : filterTab === "today"
+                    ? "Belum ada transaksi hari ini"
+                    : "Belum ada riwayat transaksi"}
               </p>
-              <p className="text-xs text-slate-400 mt-1">
-                {search ? "Coba kata kunci lain" : "Riwayat pembayaran Anda akan tampil di sini."}
+              <p className="text-xs text-slate-400 mt-1 max-w-[250px]">
+                {search || dateRange
+                  ? "Coba gunakan kata kunci atau rentang tanggal yang berbeda."
+                  : "Riwayat pembayaran iuran Anda akan muncul di sini."}
               </p>
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {filteredPayments.map((payment) => {
               const status = getStatusConfig(payment.status);
               const StatusIcon = status.icon;
               return (
                 <Card
                   key={payment.id}
-                  className="cursor-pointer hover:shadow-md transition-all hover:border-primary/20 group"
+                  className="cursor-pointer shadow-sm hover:shadow-md transition-all hover:border-primary/20 group overflow-hidden"
                   onClick={() => navigate(`/dashboard/pembayaran-warga/${payment.id}`)}
                 >
-                  <CardContent className="py-3 px-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`h-10 w-10 rounded-lg ${status.bg} flex items-center justify-center shrink-0`}>
-                        <StatusIcon className={`h-5 w-5 ${status.color}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
+                  <CardContent className="p-0">
+                    <div className="flex items-stretch">
+                      {/* Status Color Accent Line */}
+                      <div className={`w-1.5 shrink-0 ${payment.status === 'PAID' ? 'bg-emerald-500' :
+                          payment.status === 'PENDING' ? 'bg-amber-400' :
+                            payment.status === 'FAILED' ? 'bg-red-500' : 'bg-slate-300'
+                        }`}></div>
+
+                      <div className="flex-1 flex items-center gap-4 py-4 px-5">
+                        <div className={`h-10 w-10 rounded-xl ${status.bg} flex items-center justify-center shrink-0`}>
+                          <StatusIcon className={`h-5 w-5 ${status.color}`} />
+                        </div>
+
+                        <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-sm font-medium text-slate-900 truncate group-hover:text-primary transition-colors">
+                            <p className="text-sm font-semibold text-slate-900 truncate group-hover:text-primary transition-colors">
                               {payment.orderId}
                             </p>
-                            <p className="text-xs text-slate-500 mt-0.5">{formatDateTime(payment.createdAt)}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <p className="text-xs text-slate-500">{formatDateTime(payment.createdAt)}</p>
+                              {payment.methodCategory && (
+                                <>
+                                  <span className="text-slate-300">&bull;</span>
+                                  <p className="text-xs text-slate-500">{getMethodLabel(payment.methodCategory)}</p>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-sm font-bold text-slate-900">{formatRupiah(Number(payment.amount))}</p>
-                            <Badge variant={status.variant} className="text-[10px] mt-0.5">
+
+                          <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 sm:gap-1 shrink-0 mt-1 sm:mt-0">
+                            <p className="text-sm sm:text-base font-bold text-slate-900 font-poppins tracking-tight">
+                              {formatRupiah(Number(payment.amount))}
+                            </p>
+                            <Badge variant={status.variant} className="text-[10px] px-2 py-0">
                               {status.label}
                             </Badge>
                           </div>
                         </div>
-                        {payment.methodCategory && (
-                          <p className="text-xs text-slate-400 mt-1">{getMethodLabel(payment.methodCategory)}</p>
-                        )}
+
+                        <ArrowRight className="h-4 w-4 text-slate-300 shrink-0 hidden sm:block group-hover:text-primary group-hover:translate-x-1 transition-all" />
                       </div>
-                      <ArrowRight className="h-4 w-4 text-slate-300 shrink-0 group-hover:text-primary transition-colors" />
                     </div>
                   </CardContent>
                 </Card>

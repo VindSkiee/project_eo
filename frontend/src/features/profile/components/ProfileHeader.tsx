@@ -36,13 +36,16 @@ export function ProfileHeader({ profile, uploading, onPhotoUpload }: ProfileHead
   }, [resolvedRoleType]);
 
   return (
-    <Card className="overflow-hidden border-0 shadow-sm ring-1 ring-slate-200/60 rounded-xl">
-      {/* Cover Banner Area */}
-      <div className="h-28 w-full bg-gradient-to-r from-green-500/90 to-[#018656]"></div>
+    <Card className="relative overflow-hidden p-0 border-0 shadow-sm ring-1 ring-slate-200/60 rounded-xl">
+      {/* Cover Banner Area - Gunakan absolute agar paksa menempel ke ujung atas */}
+      <div className="absolute top-0 left-0 right-0 h-28 w-full bg-gradient-to-r from-green-500/90 to-[#018656]"></div>
+
+      {/* Spacer pengisi ruang untuk banner karena div di atas sekarang absolute */}
+      <div className="h-28 w-full shrink-0"></div>
 
       <CardContent className="relative px-6 pb-8 pt-0 sm:px-8">
         <div className="flex flex-col sm:flex-row sm:items-end gap-5">
-          
+
           {/* Avatar Section with overlap */}
           <div className="relative -mt-12 sm:-mt-14 z-10 shrink-0">
             <Avatar className="h-24 w-24 sm:h-28 sm:w-28 border-4 border-white shadow-md bg-white">
@@ -52,7 +55,7 @@ export function ProfileHeader({ profile, uploading, onPhotoUpload }: ProfileHead
               </AvatarFallback>
             </Avatar>
 
-            {/* Upload Button Badge - Better Mobile UX than hover overlay */}
+            {/* Upload Button Badge */}
             <label
               className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-white border border-slate-200 shadow-sm cursor-pointer hover:bg-slate-50 transition-colors group"
               title="Ganti foto"
@@ -81,8 +84,8 @@ export function ProfileHeader({ profile, uploading, onPhotoUpload }: ProfileHead
               <Badge variant="secondary" className="bg-slate-200 text-black hover:bg-indigo-100 border-0">
                 {displayRole}
               </Badge>
-              <Badge 
-                variant={profile.isActive ? "default" : "destructive"} 
+              <Badge
+                variant={profile.isActive ? "default" : "destructive"}
                 className={profile.isActive ? "bg-emerald-500 hover:bg-emerald-600 text-white" : ""}
               >
                 {profile.isActive ? "Aktif" : "Nonaktif"}

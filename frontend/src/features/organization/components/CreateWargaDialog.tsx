@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { userService } from "@/shared/services/userService";
 import type { GroupItem } from "@/shared/types";
@@ -31,9 +31,11 @@ interface CreateWargaDialogProps {
 export function CreateWargaDialog({ groups, onSuccess }: CreateWargaDialogProps) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
     email: "",
     fullName: "",
+    password: "",
     phone: "",
     address: "",
     roleType: "RESIDENT",
@@ -45,11 +47,16 @@ export function CreateWargaDialog({ groups, onSuccess }: CreateWargaDialogProps)
       toast.error("Email dan Nama Lengkap wajib diisi.");
       return;
     }
+    if (!form.password || form.password.length < 6) {
+      toast.error("Password wajib diisi, minimal 6 karakter.");
+      return;
+    }
     setSubmitting(true);
     try {
       await userService.create({
         email: form.email,
         fullName: form.fullName,
+        password: form.password,
         phone: form.phone === "" ? undefined : form.phone,
         address: form.address === "" ? undefined : form.address,
         roleType: form.roleType,
@@ -61,6 +68,7 @@ export function CreateWargaDialog({ groups, onSuccess }: CreateWargaDialogProps)
       setForm({
         email: "",
         fullName: "",
+        password: "",
         phone: "",
         address: "",
         roleType: "RESIDENT",
@@ -88,14 +96,16 @@ export function CreateWargaDialog({ groups, onSuccess }: CreateWargaDialogProps)
           Tambah Warga
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-xl"> {/* <-- Lebar diperbesar */}
         <DialogHeader>
           <DialogTitle className="font-poppins">Tambah Warga Baru</DialogTitle>
           <DialogDescription>
-            Masukkan data warga baru. Password default akan di-generate otomatis.
+            Masukkan data warga baru. Warga akan login menggunakan password yang Anda tetapkan.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
+
+        {/* Menggunakan grid 2 kolom pada layar sm ke atas */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2 px-2 -mx-2 max-h-[60vh] overflow-y-auto">
           <div className="space-y-2">
             <Label htmlFor="warga-email">Email *</Label>
             <Input
@@ -106,6 +116,7 @@ export function CreateWargaDialog({ groups, onSuccess }: CreateWargaDialogProps)
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="warga-name">Nama Lengkap *</Label>
             <Input
@@ -115,6 +126,29 @@ export function CreateWargaDialog({ groups, onSuccess }: CreateWargaDialogProps)
               onChange={(e) => setForm({ ...form, fullName: e.target.value })}
             />
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="warga-password">Password *</Label>
+            <div className="relative">
+              <Input
+                id="warga-password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Minimal 6 karakter"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="warga-phone">No. Telepon</Label>
             <Input
@@ -124,7 +158,8 @@ export function CreateWargaDialog({ groups, onSuccess }: CreateWargaDialogProps)
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
             />
           </div>
-          <div className="space-y-2">
+
+          <div className="space-y-2 sm:col-span-2"> {/* <-- Memakan 2 kolom penuh */}
             <Label htmlFor="warga-address">Alamat</Label>
             <Input
               id="warga-address"
@@ -133,6 +168,7 @@ export function CreateWargaDialog({ groups, onSuccess }: CreateWargaDialogProps)
               onChange={(e) => setForm({ ...form, address: e.target.value })}
             />
           </div>
+
           <div className="space-y-2">
             <Label>Role</Label>
             <Select
@@ -149,6 +185,7 @@ export function CreateWargaDialog({ groups, onSuccess }: CreateWargaDialogProps)
               </SelectContent>
             </Select>
           </div>
+
           <div className="space-y-2">
             <Label>Kelompok (RT)</Label>
             <Select
@@ -170,7 +207,8 @@ export function CreateWargaDialog({ groups, onSuccess }: CreateWargaDialogProps)
             </Select>
           </div>
         </div>
-        <DialogFooter>
+
+        <DialogFooter className="pt-2">
           <Button variant="outline" onClick={() => setOpen(false)}>
             Batal
           </Button>

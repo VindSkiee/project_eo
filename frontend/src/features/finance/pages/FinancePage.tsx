@@ -51,6 +51,7 @@ import type {
   EventItem,
 } from "@/shared/types";
 import { TransactionTable, FundRequestTable, ChildrenWalletsSection } from "@/features/finance/components";
+import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 
 // === HELPERS ===
 
@@ -100,6 +101,7 @@ export default function FinancePage() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectDecision, setRejectDecision] = useState("CONTINUE_WITH_ORIGINAL");
   const [submitting, setSubmitting] = useState(false);
+  const [pendingApproveFR, setPendingApproveFR] = useState<FundRequest | null>(null);
 
   // Manual Transaction Dialog
   const [showTxDialog, setShowTxDialog] = useState(false);
@@ -183,8 +185,14 @@ export default function FinancePage() {
   );
 
   // === Handle Approve Fund Request ===
-  const handleApproveFR = async (fr: FundRequest) => {
-    if (!confirm(`Setujui pengajuan dana ${formatRupiah(fr.amount)}?`)) return;
+  const handleApproveFR = (fr: FundRequest) => {
+    setPendingApproveFR(fr);
+  };
+
+  const executeApproveFR = async () => {
+    if (!pendingApproveFR) return;
+    const fr = pendingApproveFR;
+    setPendingApproveFR(null);
     try {
       await fundRequestService.approve(fr.id);
       toast.success("Pengajuan dana berhasil disetujui!");
@@ -689,7 +697,7 @@ export default function FinancePage() {
                 <SelectContent>
                   <SelectItem value="none">Tidak Ada</SelectItem>
                   {events
-                    .filter((e) => e.status === "APPROVED" || e.status === "FUNDED" || e.status === "ONGOING")
+                    .filter((e) => e.status === "FUNDED" || e.status === "ONGOING")
                     .map((e) => (
                       <SelectItem key={e.id} value={e.id}>
                         {e.title}
@@ -710,6 +718,16 @@ export default function FinancePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!pendingApproveFR}
+        onOpenChange={(v) => { if (!v) setPendingApproveFR(null); }}
+        title="Setujui Pengajuan Dana"
+        description={`Yakin ingin menyetujui pengajuan dana sebesar ${pendingApproveFR ? formatRupiah(pendingApproveFR.amount) : ""}? Tindakan ini akan langsung memproses transfer dana.`}
+        confirmLabel="Ya, Setujui"
+        variant="default"
+        onConfirm={executeApproveFR}
+      />
     </div>
   );
 }

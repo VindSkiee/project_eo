@@ -10,3 +10,9 @@ export { CommitteeList } from './CommitteeList';
 export { ExpensesSummary } from './ExpensesSummary';
 export { ApprovalWorkflow } from './ApprovalWorkflow';
 export { StatusHistory } from './StatusHistory';
+
+// Lifecycle dialogs
+export { CancelEventDialog } from './CancelEventDialog';
+export { ExpenseReportDialog } from './ExpenseReportDialog';
+export { SettleEventDialog } from './SettleEventDialog';
+export { ExtendDateDialog } from './ExtendDateDialog';

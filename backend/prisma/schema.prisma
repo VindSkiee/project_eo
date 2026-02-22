@@ -7,19 +7,307 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// --- ENUMS ---
-// (Enum tetap sama seperti sebelumnya)
+model Role {
+  id            Int            @id @default(autoincrement())
+  name          String         @unique
+  type          SystemRoleType @default(RESIDENT)
+  description   String?
+  createdAt     DateTime       @default(now())
+  approvalRules ApprovalRule[]
+  users         User[]
+}
+
+model CommunityGroup {
+  id                   Int                @id @default(autoincrement())
+  name                 String
+  type                 String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  parentId             Int?
+  approvalRules        ApprovalRule[]
+  parent               CommunityGroup?    @relation("GroupHierarchy", fields: [parentId], references: [id])
+  children             CommunityGroup[]   @relation("GroupHierarchy")
+  duesRule             DuesRule?
+  events               Event[]
+  fundRequestsSent     FundRequest[]      @relation("FundRequester")
+  fundRequestsReceived FundRequest[]      @relation("FundTarget")
+  roleLabelSettings    RoleLabelSetting[]
+  users                User[]
+  wallet               Wallet?
+
+  @@index([parentId])
+}
+
+model User {
+  id                   String               @id @default(uuid())
+  email                String               @unique
+  password             String
+  fullName             String
+  phone                String?
+  address              String?
+  roleId               Int
+  communityGroupId     Int
+  createdById          String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  deletedAt            DateTime?
+  isActive             Boolean              @default(true)
+  lastPaidPeriod       DateTime?
+  profileImage         String?
+  contributions        Contribution[]
+  eventsCreated        Event[]              @relation("EventCreator")
+  approvalsGiven       EventApproval[]      @relation("ApproverUser")
+  eventParticipations  EventParticipant[]
+  statusChanges        EventStatusHistory[] @relation("StatusChanger")
+  fundRequestsApproved FundRequest[]        @relation("FundApprover")
+  fundRequestsCreated  FundRequest[]        @relation("FundCreator")
+  paymentGatewayTxs    PaymentGatewayTx[]
+  transactions         Transaction[]
+  communityGroup       CommunityGroup       @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+  createdBy            User?                @relation("UserCreator", fields: [createdById], references: [id])
+  createdUsers         User[]               @relation("UserCreator")
+  role                 Role                 @relation(fields: [roleId], references: [id])
+
+  @@index([communityGroupId])
+  @@index([roleId])
+  @@index([email])
+}
+
+model Wallet {
+  id               Int            @id @default(autoincrement())
+  balance          Decimal        @default(0) @db.Decimal(15, 2)
+  communityGroupId Int            @unique
+  updatedAt        DateTime       @updatedAt
+  transactions     Transaction[]
+  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+}
+
+model DuesRule {
+  id               Int            @id @default(autoincrement())
+  communityGroupId Int            @unique
+  amount           Decimal        @db.Decimal(15, 2)
+  dueDay           Int            @default(10)
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+}
+
+model Contribution {
+  id                 String            @id @default(uuid())
+  userId             String
+  amount             Decimal           @db.Decimal(15, 2)
+  month              Int
+  year               Int
+  paidAt             DateTime          @default(now())
+  paymentGatewayTxId String?           @unique
+  createdAt          DateTime          @default(now())
+  paymentGatewayTx   PaymentGatewayTx? @relation(fields: [paymentGatewayTxId], references: [id])
+  user               User              @relation(fields: [userId], references: [id])
+  transaction        Transaction?
+
+  @@index([userId])
+  @@index([month, year])
+}
+
+model Transaction {
+  id             String          @id @default(uuid())
+  walletId       Int
+  amount         Decimal         @db.Decimal(15, 2)
+  type           TransactionType
+  description    String
+  referenceCode  String?
+  contributionId String?         @unique
+  eventId        String?
+  createdAt      DateTime        @default(now())
+  createdById    String?
+  contribution   Contribution?   @relation(fields: [contributionId], references: [id])
+  createdBy      User?           @relation(fields: [createdById], references: [id])
+  event          Event?          @relation(fields: [eventId], references: [id])
+  wallet         Wallet          @relation(fields: [walletId], references: [id])
+
+  @@index([walletId, createdAt(sort: Desc)])
+  @@index([eventId])
+  @@index([type])
+  @@index([createdById])
+}
+
+model Event {
+  id                String               @id @default(uuid())
+  title             String
+  description       String
+  status            EventStatus          @default(DRAFT)
+  budgetEstimated   Decimal              @db.Decimal(15, 2)
+  budgetActual      Decimal?             @db.Decimal(15, 2)
+  startDate         DateTime?
+  endDate           DateTime?
+  receiptImages     String[]             @default([])
+  resultImages      String[]             @default([])
+  resultDescription String?
+  communityGroupId  Int
+  createdById       String
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  communityGroup    CommunityGroup       @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+  createdBy         User                 @relation("EventCreator", fields: [createdById], references: [id])
+  approvals         EventApproval[]
+  expenses          EventExpense[]
+  participants      EventParticipant[]
+  statusHistory     EventStatusHistory[]
+  fundRequests      FundRequest[]
+  transactions      Transaction[]
+
+  @@index([communityGroupId, status])
+  @@index([startDate])
+  @@index([createdById])
+}
+
+model ApprovalRule {
+  id               Int            @id @default(autoincrement())
+  communityGroupId Int
+  roleId           Int
+  stepOrder        Int
+  isMandatory      Boolean        @default(true)
+  isCrossGroup     Boolean        @default(false)
+  minAmount        Decimal?       @db.Decimal(15, 2)
+  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+  role             Role           @relation(fields: [roleId], references: [id])
+
+  @@unique([communityGroupId, roleId, stepOrder])
+  @@index([communityGroupId])
+}
+
+model EventApproval {
+  id           String         @id @default(uuid())
+  eventId      String
+  approverId   String
+  roleSnapshot String
+  stepOrder    Int
+  status       ApprovalStatus
+  notes        String?
+  createdAt    DateTime       @default(now())
+  approvedAt   DateTime?
+  approver     User           @relation("ApproverUser", fields: [approverId], references: [id])
+  event        Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, approverId, stepOrder])
+  @@index([eventId])
+}
+
+model EventStatusHistory {
+  id             String      @id @default(uuid())
+  eventId        String
+  changedById    String
+  previousStatus EventStatus
+  newStatus      EventStatus
+  reason         String?
+  createdAt      DateTime    @default(now())
+  changedBy      User        @relation("StatusChanger", fields: [changedById], references: [id])
+  event          Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+model EventParticipant {
+  id       Int                  @id @default(autoincrement())
+  eventId  String
+  userId   String
+  role     EventParticipantRole @default(ATTENDEE)
+  joinedAt DateTime             @default(now())
+  event    Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user     User                 @relation(fields: [userId], references: [id])
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model EventExpense {
+  id         String   @id @default(uuid())
+  eventId    String
+  title      String
+  amount     Decimal  @db.Decimal(15, 2)
+  proofImage String?
+  verifiedBy String?
+  isValid    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  event      Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+model PaymentGatewayTx {
+  id             String                @id @default(uuid())
+  orderId        String                @unique
+  midtransId     String?               @unique
+  amount         Decimal               @db.Decimal(15, 2)
+  grossAmount    Decimal               @db.Decimal(15, 2)
+  status         PaymentGatewayStatus  @default(PENDING)
+  methodCategory PaymentMethodCategory
+  providerCode   String?
+  vaNumber       String?
+  snapToken      String?
+  redirectUrl    String?
+  rawRequest     Json?
+  rawResponse    Json?
+  paidAt         DateTime?
+  userId         String
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  contribution   Contribution?
+  user           User                  @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model FundRequest {
+  id               String            @id @default(uuid())
+  requesterGroupId Int
+  targetGroupId    Int
+  amount           Decimal           @db.Decimal(15, 2)
+  description      String
+  status           FundRequestStatus @default(PENDING)
+  createdById      String
+  approvedById     String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  eventId          String?
+  approvedBy       User?             @relation("FundApprover", fields: [approvedById], references: [id])
+  createdBy        User              @relation("FundCreator", fields: [createdById], references: [id])
+  event            Event?            @relation(fields: [eventId], references: [id])
+  requesterGroup   CommunityGroup    @relation("FundRequester", fields: [requesterGroupId], references: [id], onDelete: Cascade)
+  targetGroup      CommunityGroup    @relation("FundTarget", fields: [targetGroupId], references: [id], onDelete: Cascade)
+
+  @@index([targetGroupId, status])
+  @@index([requesterGroupId])
+}
+
+model RoleLabelSetting {
+  id               Int            @id @default(autoincrement())
+  roleType         SystemRoleType
+  label            String
+  communityGroupId Int
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([roleType, communityGroupId])
+  @@index([communityGroupId])
+}
+
 enum EventStatus {
   DRAFT
   SUBMITTED
   UNDER_REVIEW
   REJECTED
   APPROVED
-  CANCELLED
   FUNDED
   ONGOING
   COMPLETED
   SETTLED
+  CANCELLED
 }
 
 enum TransactionType {
@@ -69,348 +357,4 @@ enum PaymentMethodCategory {
   CREDIT_CARD
   CONVENIENCE_STORE
   MANUAL_TRANSFER
-}
-
-// --- CORE SYSTEM & RBAC ---
-
-model Role {
-  id            Int            @id @default(autoincrement())
-  name          String         @unique
-  type          SystemRoleType @default(RESIDENT)
-  description   String?
-  users         User[]
-  approvalRules ApprovalRule[]
-  createdAt     DateTime       @default(now())
-}
-
-model CommunityGroup {
-  id        Int    @id @default(autoincrement())
-  name      String
-  type      String // 'RT' atau 'RW'
-  parentId  Int?
-  
-  parent   CommunityGroup?  @relation("GroupHierarchy", fields: [parentId], references: [id])
-  children CommunityGroup[] @relation("GroupHierarchy")
-
-  users                User[]
-  events               Event[]
-  wallet               Wallet?
-  approvalRules        ApprovalRule[]
-  fundRequestsSent     FundRequest[] @relation("FundRequester")
-  fundRequestsReceived FundRequest[] @relation("FundTarget")
-  duesRule             DuesRule?
-  roleLabelSettings    RoleLabelSetting[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // ⚡ INDEX: Mempercepat query hierarki (Mencari anak buah RW tertentu)
-  @@index([parentId]) 
-}
-
-model User {
-  id               String         @id @default(uuid())
-  email            String         @unique
-  password         String
-  fullName         String
-  phone            String?
-  address          String?
-  profileImage     String?
-  isActive         Boolean        @default(true)
-  
-  roleId           Int
-  role             Role           @relation(fields: [roleId], references: [id])
-  
-  communityGroupId Int
-  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
-
-  createdById  String?
-  createdBy    User?   @relation("UserCreator", fields: [createdById], references: [id])
-  createdUsers User[]  @relation("UserCreator")
-
-  contributions        Contribution[]
-  eventsCreated        Event[]              @relation("EventCreator")
-  eventParticipations  EventParticipant[]
-  approvalsGiven       EventApproval[]      @relation("ApproverUser")
-  statusChanges        EventStatusHistory[] @relation("StatusChanger")
-  paymentGatewayTxs    PaymentGatewayTx[]
-  fundRequestsCreated  FundRequest[]        @relation("FundCreator")
-  fundRequestsApproved FundRequest[]        @relation("FundApprover")
-  transactions         Transaction[]
-
-  lastPaidPeriod DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
-
-  // ⚡ INDEX:
-  // 1. Mempercepat login & pencarian user per Group
-  // 2. Mempercepat filter berdasarkan Role (Misal: Cari semua Bendahara)
-  @@index([communityGroupId])
-  @@index([roleId])
-  @@index([email]) 
-}
-
-// --- FINANCE MODULE ---
-
-model Wallet {
-  id               Int            @id @default(autoincrement())
-  balance          Decimal        @default(0) @db.Decimal(15, 2)
-  communityGroupId Int            @unique
-  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
-  transactions     Transaction[]
-  updatedAt        DateTime       @updatedAt
-}
-
-model DuesRule {
-  id               Int            @id @default(autoincrement())
-  communityGroupId Int            @unique
-  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
-  amount           Decimal        @db.Decimal(15, 2)
-  dueDay           Int            @default(10)
-  isActive         Boolean        @default(true)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-}
-
-model Contribution {
-  id                 String            @id @default(uuid())
-  userId             String
-  user               User              @relation(fields: [userId], references: [id])
-  amount             Decimal           @db.Decimal(15, 2)
-  month              Int
-  year               Int
-  paidAt             DateTime          @default(now())
-  transaction        Transaction?
-  paymentGatewayTxId String?           @unique
-  paymentGatewayTx   PaymentGatewayTx? @relation(fields: [paymentGatewayTxId], references: [id])
-  createdAt          DateTime          @default(now())
-
-  // ⚡ INDEX:
-  // 1. Mempercepat history pembayaran User
-  // 2. Mempercepat laporan bulanan (Cari semua pembayaran bulan X tahun Y)
-  @@index([userId])
-  @@index([month, year]) 
-}
-
-model Transaction {
-  id            String          @id @default(uuid())
-  walletId      Int
-  wallet        Wallet          @relation(fields: [walletId], references: [id])
-  amount        Decimal         @db.Decimal(15, 2)
-  type          TransactionType
-  description   String
-  referenceCode String?
-  createdById   String?
-  createdBy     User?           @relation(fields: [createdById], references: [id])
-  
-  contributionId String?       @unique
-  contribution   Contribution? @relation(fields: [contributionId], references: [id])
-  
-  eventId String?
-  event   Event?  @relation(fields: [eventId], references: [id])
-
-  createdAt DateTime @default(now())
-
-  // ⚡ INDEX PENTING (High Traffic Table):
-  // 1. [walletId, createdAt]: Super cepat untuk "Infinite Scroll" history dompet
-  // 2. [eventId]: Cepat cari pengeluaran event tertentu
-  // 3. [type]: Cepat hitung total Debit vs Credit
-  @@index([walletId, createdAt(sort: Desc)]) 
-  @@index([eventId])
-  @@index([type])
-  @@index([createdById])
-}
-
-// --- EVENT MODULE ---
-
-model Event {
-  id               String         @id @default(uuid())
-  title            String
-  description      String         @db.Text
-  status           EventStatus    @default(DRAFT)
-  budgetEstimated  Decimal        @db.Decimal(15, 2)
-  budgetActual     Decimal?       @db.Decimal(15, 2)
-  startDate        DateTime?
-  endDate          DateTime?
-  
-  communityGroupId Int
-  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
-  
-  createdById   String
-  createdBy     User               @relation("EventCreator", fields: [createdById], references: [id])
-  fundRequests  FundRequest[]
-  approvals     EventApproval[]
-  statusHistory EventStatusHistory[]
-  participants  EventParticipant[]
-  transactions  Transaction[]
-  expenses      EventExpense[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // ⚡ INDEX:
-  // 1. Dashboard: Cari event berdasarkan Group dan Statusnya (Misal: Event Aktif di RT 01)
-  // 2. Calendar: Cari event berdasarkan tanggal mulai
-  @@index([communityGroupId, status])
-  @@index([startDate])
-  @@index([createdById])
-}
-
-model ApprovalRule {
-  id               Int            @id @default(autoincrement())
-  communityGroupId Int
-  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
-  roleId           Int
-  role             Role           @relation(fields: [roleId], references: [id])
-  stepOrder        Int
-  isMandatory      Boolean        @default(true)
-  minAmount        Decimal?       @db.Decimal(15, 2)
-  isCrossGroup     Boolean        @default(false)
-
-  @@unique([communityGroupId, roleId, stepOrder])
-  // ⚡ INDEX: Mempercepat pencarian rule saat event dibuat
-  @@index([communityGroupId]) 
-}
-
-model EventApproval {
-  id           String         @id @default(uuid())
-  eventId      String
-  event        Event          @relation(fields: [eventId], references: [id])
-  approverId   String
-  approver     User           @relation("ApproverUser", fields: [approverId], references: [id])
-  roleSnapshot String
-  stepOrder    Int
-  status       ApprovalStatus
-  notes        String?
-  approvedAt   DateTime?
-  createdAt    DateTime       @default(now())
-
-  @@unique([eventId, approverId, stepOrder])
-  // ⚡ INDEX: Mempercepat pengecekan status approval suatu event
-  @@index([eventId]) 
-}
-
-model EventStatusHistory {
-  id             String      @id @default(uuid())
-  eventId        String
-  event          Event       @relation(fields: [eventId], references: [id])
-  changedById    String
-  changedBy      User        @relation("StatusChanger", fields: [changedById], references: [id])
-  previousStatus EventStatus
-  newStatus      EventStatus
-  reason         String?
-  createdAt      DateTime    @default(now())
-
-  // ⚡ INDEX: Audit trail sering di-query per event
-  @@index([eventId])
-}
-
-model EventParticipant {
-  id       Int                  @id @default(autoincrement())
-  eventId  String
-  event    Event                @relation(fields: [eventId], references: [id])
-  userId   String
-  user     User                 @relation(fields: [userId], references: [id])
-  role     EventParticipantRole @default(ATTENDEE)
-  joinedAt DateTime             @default(now())
-
-  @@unique([eventId, userId])
-  // ⚡ INDEX:
-  // 1. Cek peserta event
-  // 2. Cek user ini ikut event apa saja
-  @@index([eventId])
-  @@index([userId])
-}
-
-model EventExpense {
-  id         String   @id @default(uuid())
-  eventId    String
-  event      Event    @relation(fields: [eventId], references: [id])
-  title      String
-  amount     Decimal  @db.Decimal(15, 2)
-  proofImage String?
-  verifiedBy String?
-  isValid    Boolean  @default(false)
-  createdAt  DateTime @default(now())
-
-  // ⚡ INDEX: Rekap pengeluaran per event
-  @@index([eventId])
-}
-
-// --- MIDTRANS & PAYMENT INTEGRATION ---
-
-model PaymentGatewayTx {
-  id             String                @id @default(uuid())
-  orderId        String                @unique
-  midtransId     String?               @unique
-  amount         Decimal               @db.Decimal(15, 2)
-  grossAmount    Decimal               @db.Decimal(15, 2)
-  status         PaymentGatewayStatus  @default(PENDING)
-  methodCategory PaymentMethodCategory
-  providerCode   String?
-  vaNumber       String?
-  snapToken      String?
-  redirectUrl    String?
-  rawRequest     Json?
-  rawResponse    Json?
-  paidAt         DateTime?
-  
-  userId       String
-  user         User          @relation(fields: [userId], references: [id])
-  contribution Contribution?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // ⚡ INDEX:
-  // 1. Webhook processing (Cari by Order ID sudah unique, tapi status sering di-filter)
-  // 2. History transaksi User
-  // 3. Reporting harian (CreatedAt)
-  @@index([userId])
-  @@index([status])
-  @@index([createdAt])
-}
-
-model FundRequest {
-  id               String            @id @default(uuid())
-  requesterGroupId Int
-  requesterGroup   CommunityGroup    @relation("FundRequester", fields: [requesterGroupId], references: [id], onDelete: Cascade)
-  targetGroupId    Int
-  targetGroup      CommunityGroup    @relation("FundTarget", fields: [targetGroupId], references: [id], onDelete: Cascade)
-  amount           Decimal           @db.Decimal(15, 2)
-  description      String            @db.Text
-  status           FundRequestStatus @default(PENDING)
-  
-  eventId      String?
-  event        Event? @relation(fields: [eventId], references: [id])
-  createdById  String
-  createdBy    User   @relation("FundCreator", fields: [createdById], references: [id])
-  approvedById String?
-  approvedBy   User?  @relation("FundApprover", fields: [approvedById], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // ⚡ INDEX:
-  // 1. Inbox RW (Melihat request masuk: targetGroup + status)
-  // 2. Outbox RT (Melihat request terkirim: requesterGroup)
-  @@index([targetGroupId, status])
-  @@index([requesterGroupId])
-}
-
-// --- ROLE LABEL SETTINGS ---
-
-model RoleLabelSetting {
-  id               Int            @id @default(autoincrement())
-  roleType         SystemRoleType
-  label            String
-  communityGroupId Int
-  communityGroup   CommunityGroup @relation(fields: [communityGroupId], references: [id], onDelete: Cascade)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-
-  @@unique([roleType, communityGroupId])
-  @@index([communityGroupId])
 }

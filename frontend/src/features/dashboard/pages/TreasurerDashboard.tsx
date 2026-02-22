@@ -12,6 +12,8 @@ import {
   CalendarDays,
   ArrowRight,
   CreditCard,
+  AlertTriangle,
+  Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
@@ -91,6 +93,8 @@ export default function FinanceDashboard() {
   const activeEvents = events.filter(
     (e) => e.status === "APPROVED" || e.status === "FUNDED" || e.status === "ONGOING"
   );
+  const eventsNeedingReview = events.filter((e) => e.status === "SUBMITTED");
+  const eventsFunded = events.filter((e) => e.status === "FUNDED");
   const recentTx = transactions.slice(0, 5);
   const recentEvents = events.slice(0, 5);
 
@@ -142,6 +146,74 @@ export default function FinanceDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Alert: Events Needing Review */}
+      {!loading && eventsNeedingReview.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-amber-800 text-sm">
+                  {eventsNeedingReview.length} acara menunggu persetujuan Anda
+                </h3>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Segera review dan setujui/tolak pengajuan acara berikut.
+                </p>
+                <div className="mt-2 space-y-1.5">
+                  {eventsNeedingReview.map((ev) => (
+                    <Link key={ev.id} to={`/dashboard/events/${ev.id}`}>
+                      <div className="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-200 hover:border-amber-400 transition-colors cursor-pointer">
+                        <div>
+                          <span className="text-sm font-medium text-slate-800">{ev.title}</span>
+                          <span className="text-xs text-slate-500 ml-2">
+                            Anggaran: {formatRupiah(Number(ev.budgetEstimated))}
+                          </span>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-amber-600" />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Alert: Events Needing Expense Report */}
+      {!loading && eventsFunded.length > 0 && (
+        <Card className="border-blue-300 bg-blue-50">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <Receipt className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-blue-800 text-sm">
+                  {eventsFunded.length} acara perlu input laporan pengeluaran
+                </h3>
+                <p className="text-xs text-blue-700 mt-0.5">
+                  Dana sudah dicairkan. Input daftar belanja dan bukti nota untuk memulai acara.
+                </p>
+                <div className="mt-2 space-y-1.5">
+                  {eventsFunded.map((ev) => (
+                    <Link key={ev.id} to={`/dashboard/events/${ev.id}`}>
+                      <div className="flex items-center justify-between p-2 bg-white rounded-lg border border-blue-200 hover:border-blue-400 transition-colors cursor-pointer">
+                        <div>
+                          <span className="text-sm font-medium text-slate-800">{ev.title}</span>
+                          <span className="text-xs text-slate-500 ml-2">
+                            Dana: {formatRupiah(Number(ev.budgetEstimated))}
+                          </span>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-blue-600" />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">

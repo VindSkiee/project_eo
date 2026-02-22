@@ -4,7 +4,7 @@ import { EventStatus, EventParticipantRole, Prisma } from '@prisma/client';
 
 @Injectable()
 export class EventsRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // ==========================================
   // 1. CREATE EVENT (Dengan Pendaftaran Panitia)
@@ -94,17 +94,32 @@ export class EventsRepository {
       include: {
         communityGroup: { select: { name: true, type: true, parentId: true } },
         createdBy: { select: { fullName: true, role: true } },
+
+        // --- BAGIAN INI YANG DIUPDATE ---
         participants: {
-          include: { user: { select: { fullName: true, email: true, phone: true } } },
+          include: {
+            user: {
+              select: {
+                fullName: true,
+                email: true,
+                phone: true,
+                profileImage: true, // Tambahan untuk avatar (opsional tapi disarankan)
+                role: { select: { type: true, name: true } }, // Ambil data role (ADMIN, LEADER, dll)
+                communityGroup: { select: { name: true } }    // Ambil data nama RT/RW
+              }
+            }
+          },
         },
-        expenses: true, // Untuk detail, tarik semua pengeluaran (termasuk yang belum divalidasi)
+        // ---------------------------------
+
+        expenses: true,
         approvals: {
           include: { approver: { select: { fullName: true } } },
-          orderBy: { stepOrder: 'asc' }, // Urutkan berdasarkan urutan approval
+          orderBy: { stepOrder: 'asc' },
         },
         statusHistory: {
           include: { changedBy: { select: { fullName: true } } },
-          orderBy: { createdAt: 'desc' }, // Jejak audit status
+          orderBy: { createdAt: 'desc' },
         },
       },
     });
@@ -186,7 +201,7 @@ export class EventsRepository {
     // Gunakan createMany agar bisa insert banyak sekaligus dan mengabaikan yang duplikat
     return this.prisma.eventParticipant.createMany({
       data: participantsData,
-      skipDuplicates: true, 
+      skipDuplicates: true,
     });
   }
 
@@ -216,7 +231,7 @@ export class EventsRepository {
   async findExpenseById(expenseId: string) {
     return this.prisma.eventExpense.findUnique({
       where: { id: expenseId },
-      include: { 
+      include: {
         event: { select: { communityGroupId: true, status: true } } // Di-include untuk cek IDOR di Service
       }
     });

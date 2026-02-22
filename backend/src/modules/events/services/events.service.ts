@@ -2,7 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
-  BadRequestException
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { EventsRepository } from '../events.repository';
 import { ActiveUserData } from '@common/decorators/active-user.decorator';
@@ -10,28 +11,27 @@ import { EventStatus, SystemRoleType } from '@prisma/client';
 import { CreateEventDto } from '../dto/create-event.dto';
 import { UpdateEventDto } from '../dto/update-event.dto';
 import { EventApprovalService } from './event-approval.service';
-import { SubmitExpenseDto } from '../dto/submit-expense.dto';
-import { VerifyExpenseDto } from '../dto/verify-expense.dto';
+import { SubmitExpenseReportDto } from '../dto/submit-expense-report.dto';
+import { ExtendEventDateDto } from '../dto/extend-event-date.dto';
 import { FinanceService } from '../../finance/services/finance.service'; 
 import { PrismaService } from '../../../database/prisma.service';
+import { StorageService } from '../../../providers/storage/storage.service';
 
 @Injectable()
 export class EventsService {
+  private readonly logger = new Logger(EventsService.name);
+
   constructor(
     private readonly eventsRepo: EventsRepository,
     private readonly eventApprovalService: EventApprovalService,
     private readonly financeService: FinanceService,
     private readonly prisma: PrismaService,
+    private readonly storageService: StorageService,
   ) { }
 
-  // ==========================================
-  // FUNGSI PEMBANTU: PENCEGAHAN IDOR LINTAS RT
-  // (Now also allows parent group events for child group users)
-  // ==========================================
   private async checkGroupAccess(eventCommunityGroupId: number, user: ActiveUserData) {
     if (eventCommunityGroupId === user.communityGroupId) return;
 
-    // Allow access if the event belongs to the user's parent group
     const userGroup = await this.prisma.communityGroup.findUnique({
       where: { id: user.communityGroupId },
       select: { parentId: true },
@@ -43,7 +43,7 @@ export class EventsService {
   }
 
   // ==========================================
-  // 1. CREATE EVENT
+  // 1. CREATE EVENT (Leader/Admin only)
   // ==========================================
   async createEvent(
     createEventDto: CreateEventDto,
@@ -52,12 +52,11 @@ export class EventsService {
   ) {
     const pengurusRoles: SystemRoleType[] = [
       SystemRoleType.ADMIN,
-      SystemRoleType.TREASURER,
       SystemRoleType.LEADER
     ];
     const isPengurus = pengurusRoles.includes(user.roleType);
     if (!isPengurus) {
-      throw new ForbiddenException('Hanya pengurus RT/RW yang dapat membuat pengajuan acara');
+      throw new ForbiddenException('Hanya Ketua atau Admin yang dapat membuat pengajuan acara');
     }
 
     return this.eventsRepo.createEvent(
@@ -71,12 +70,11 @@ export class EventsService {
   }
 
   // ==========================================
-  // 2. GET ALL EVENTS (Including parent group events)
+  // 2. GET ALL EVENTS + Auto-Complete Check
   // ==========================================
   async findAllEvents(user: ActiveUserData) {
     const groupIds = [user.communityGroupId];
 
-    // If user is in a child group (RT), also show events from parent (RW)
     const group = await this.prisma.communityGroup.findUnique({
       where: { id: user.communityGroupId },
       select: { parentId: true },
@@ -85,6 +83,9 @@ export class EventsService {
     if (group?.parentId) {
       groupIds.push(group.parentId);
     }
+
+    // Auto-complete events that have passed endDate
+    await this.autoCompleteExpiredEvents(groupIds);
 
     const events = await this.eventsRepo.findAll(groupIds);
 
@@ -96,43 +97,60 @@ export class EventsService {
   }
 
   // ==========================================
-  // 3. GET EVENT DETAILS
+  // 3. GET EVENT DETAILS + Auto-Complete Check
   // ==========================================
   async getEventDetails(eventId: string, user: ActiveUserData) {
     const event = await this.eventsRepo.findById(eventId);
     if (!event) throw new NotFoundException('Acara tidak ditemukan');
-    this.checkGroupAccess(event.communityGroupId, user);
+    await this.checkGroupAccess(event.communityGroupId, user);
+
+    // Auto-complete if endDate has passed
+    if (
+      event.status === EventStatus.ONGOING &&
+      event.endDate &&
+      new Date(event.endDate) <= new Date()
+    ) {
+      await this.eventsRepo.updateEventStatus(
+        eventId,
+        EventStatus.COMPLETED,
+        event.createdById,
+        'Acara otomatis selesai karena telah melewati tanggal berakhir.'
+      );
+      const updated = await this.eventsRepo.findById(eventId);
+      if (!updated) throw new NotFoundException('Acara tidak ditemukan setelah update');
+      return updated;
+    }
+
     return event;
   }
 
   // ==========================================
-  // 4. UPDATE EVENT (Hanya saat DRAFT)
+  // 4. UPDATE EVENT (DRAFT/REJECTED only)
   // ==========================================
   async updateEvent(eventId: string, updateEventDto: UpdateEventDto, user: ActiveUserData) {
     const event = await this.eventsRepo.findById(eventId);
     if (!event) throw new NotFoundException('Acara tidak ditemukan');
-
-    this.checkGroupAccess(event.communityGroupId, user);
+    await this.checkGroupAccess(event.communityGroupId, user);
 
     if (event.createdById !== user.id) {
       throw new ForbiddenException('Hanya pembuat acara yang dapat mengubah detailnya');
     }
 
-    if (event.status !== EventStatus.DRAFT) {
-      throw new BadRequestException('Acara yang sudah diajukan (SUBMITTED) tidak dapat diubah.');
+    const editableStatuses: EventStatus[] = [EventStatus.DRAFT, EventStatus.REJECTED];
+    if (!editableStatuses.includes(event.status)) {
+      throw new BadRequestException('Acara hanya dapat diubah saat berstatus DRAFT atau REJECTED.');
     }
 
     return this.eventsRepo.updateEvent(eventId, updateEventDto);
   }
 
   // ==========================================
-  // 4.5 DELETE EVENT (Hanya saat DRAFT)
+  // 4.5 DELETE EVENT (DRAFT only)
   // ==========================================
   async deleteEvent(eventId: string, user: ActiveUserData) {
     const event = await this.eventsRepo.findById(eventId);
     if (!event) throw new NotFoundException('Acara tidak ditemukan');
-
-    this.checkGroupAccess(event.communityGroupId, user);
+    await this.checkGroupAccess(event.communityGroupId, user);
 
     if (event.createdById !== user.id) {
       throw new ForbiddenException('Hanya pembuat acara yang dapat menghapusnya');
@@ -147,68 +165,37 @@ export class EventsService {
   }
 
   // ==========================================
-  // 5. SUBMIT EVENT (Draft -> Submitted)
+  // 5. SUBMIT EVENT → SUBMITTED (dikirim ke Treasurer)
   // ==========================================
   async submitEvent(eventId: string, user: ActiveUserData) {
     const event = await this.eventsRepo.findById(eventId);
     if (!event) throw new NotFoundException('Acara tidak ditemukan');
+    await this.checkGroupAccess(event.communityGroupId, user);
 
-    this.checkGroupAccess(event.communityGroupId, user);
-
-    if (event.status !== EventStatus.DRAFT) {
-      throw new BadRequestException('Hanya acara berstatus DRAFT yang dapat diajukan');
+    const submittableStatuses: EventStatus[] = [EventStatus.DRAFT, EventStatus.REJECTED];
+    if (!submittableStatuses.includes(event.status)) {
+      throw new BadRequestException(
+        `Hanya acara berstatus DRAFT atau REJECTED yang dapat diajukan. Status saat ini: ${event.status}`
+      );
     }
 
-    const updatedEvent = await this.eventsRepo.updateEventStatus(
+    const reason = event.status === EventStatus.REJECTED
+      ? 'Pengajuan ulang setelah ditolak'
+      : 'Pengajuan awal oleh pembuat acara, menunggu review Bendahara';
+
+    // Generate approval workflow (single step: Treasurer)
+    await this.eventApprovalService.generateApprovalWorkflow(eventId);
+
+    return this.eventsRepo.updateEventStatus(
       eventId,
       EventStatus.SUBMITTED,
       user.id,
-      'Pengajuan awal oleh pembuat acara'
-    );
-
-    // Generate workflow approval
-    await this.eventApprovalService.generateApprovalWorkflow(eventId);
-
-    return updatedEvent;
-  }
-
-  // ==========================================
-  // [BARU] 5.5 FUND EVENT (Approved -> Funded)
-  // ==========================================
-  // Method ini untuk mencairkan dana saat status sudah APPROVED
-  async fundEvent(eventId: string, user: ActiveUserData) {
-    const event = await this.getEventDetails(eventId, user);
-
-    // 1. Validasi Status
-    if (event.status !== EventStatus.APPROVED) {
-      throw new BadRequestException('Hanya acara yang sudah DISETUJUI (APPROVED) yang dananya bisa dicairkan.');
-    }
-
-    // 2. Validasi Role (Hanya Bendahara/Ketua yang boleh pegang tombol cairkan uang)
-    const allowedRoles: SystemRoleType[] = [SystemRoleType.TREASURER, SystemRoleType.LEADER];
-    if (!allowedRoles.includes(user.roleType)) {
-      throw new ForbiddenException('Hanya Bendahara atau Ketua yang dapat mencairkan dana acara.');
-    }
-
-    // 3. INTEGRASI FINANCE: Kurangi Saldo Wallet (Disbursement)
-    // Jika saldo kurang, fungsi ini akan throw Error dan proses berhenti di sini.
-    await this.financeService.disburseEventFund(
-        event.communityGroupId, 
-        Number(event.budgetEstimated), // Convert Decimal ke Number
-        event.id
-    );
-
-    // 4. Update Status Acara ke FUNDED
-    return this.eventsRepo.updateEventStatus(
-        eventId, 
-        EventStatus.FUNDED, 
-        user.id, 
-        `Dana sebesar Rp${event.budgetEstimated} berhasil dicairkan.`
+      reason
     );
   }
 
   // ==========================================
-  // 6. CANCEL EVENT & REFUND WALLET LOGIC
+  // 6. CANCEL EVENT & REFUND
   // ==========================================
   async cancelEvent(eventId: string, reason: string, user: ActiveUserData) {
     const event = await this.getEventDetails(eventId, user);
@@ -234,16 +221,14 @@ export class EventsService {
       throw new ForbiddenException('Anda tidak memiliki hak untuk membatalkan acara ini');
     }
 
-    // 👇 INTEGRASI FINANCE: REFUND FULL
     if (event.status === EventStatus.FUNDED || event.status === EventStatus.ONGOING) {
-       // Panggil FinanceService untuk mengembalikan 100% modal awal
-       await this.financeService.refundEventFund(
-          event.communityGroupId,
-          Number(event.budgetEstimated), // Refund sebesar budget awal
-          event.id,
-          `Full Refund akibat Pembatalan Acara: ${reason}`
-       );
-       console.log(`[Finance Trigger] Refund Full dana event ${eventId} berhasil.`);
+      await this.financeService.refundEventFund(
+        event.communityGroupId,
+        Number(event.budgetEstimated),
+        event.id,
+        `Full Refund akibat Pembatalan Acara: ${reason}`
+      );
+      this.logger.log(`Refund Full dana event ${eventId} berhasil.`);
     }
 
     return this.eventsRepo.updateEventStatus(
@@ -255,124 +240,241 @@ export class EventsService {
   }
 
   // ==========================================
-  // 7. SUBMIT EXPENSE (Panitia Upload Nota)
+  // 7. SUBMIT EXPENSE REPORT (Treasurer, FUNDED → ONGOING)
+  //    Treasurer menginput daftar belanja, upload bukti nota,
+  //    dan sisa uang, lalu submit → status jadi ONGOING
   // ==========================================
-  async submitEventExpense(
+  async submitExpenseReport(
     eventId: string,
-    dto: SubmitExpenseDto,
-    user: ActiveUserData
+    dto: SubmitExpenseReportDto,
+    receiptFiles: Express.Multer.File[],
+    user: ActiveUserData,
   ) {
-    const event = await this.getEventDetails(eventId, user);
+    const event = await this.eventsRepo.findById(eventId);
+    if (!event) throw new NotFoundException('Acara tidak ditemukan');
+    await this.checkGroupAccess(event.communityGroupId, user);
 
-    const allowedStatuses: EventStatus[] = [EventStatus.FUNDED, EventStatus.ONGOING];
-    if (!allowedStatuses.includes(event.status)) {
-      throw new BadRequestException('Nota hanya dapat diunggah saat acara berstatus FUNDED atau ONGOING');
+    // Hanya saat FUNDED
+    if (event.status !== EventStatus.FUNDED) {
+      throw new BadRequestException('Laporan pengeluaran hanya dapat disubmit saat acara berstatus FUNDED');
     }
 
-    const isCreator = event.createdById === user.id;
-    const isCommittee = event.participants.some(
-      (p) => p.userId === user.id && p.role === 'COMMITTEE'
-    );
-
-    if (!isCreator && !isCommittee) {
-      throw new ForbiddenException('Hanya panitia acara yang diizinkan mengunggah bukti pengeluaran');
+    // Hanya Treasurer
+    if (user.roleType !== SystemRoleType.TREASURER) {
+      throw new ForbiddenException('Hanya Bendahara yang dapat menginput laporan pengeluaran');
     }
 
-    if (event.status === EventStatus.FUNDED) {
-      await this.eventsRepo.updateEventStatus(
-        eventId,
-        EventStatus.ONGOING,
-        user.id,
-        'Nota pertama diunggah, acara otomatis menjadi ONGOING'
+    // Parse items
+    const items: { title: string; amount: number }[] = 
+      typeof dto.items === 'string' ? JSON.parse(dto.items) : dto.items;
+
+    if (!items || items.length === 0) {
+      throw new BadRequestException('Minimal 1 item pengeluaran harus diinput');
+    }
+
+    // Validate items
+    for (const item of items) {
+      if (!item.title || item.title.trim().length === 0) {
+        throw new BadRequestException('Nama item pengeluaran wajib diisi');
+      }
+      if (!item.amount || item.amount <= 0) {
+        throw new BadRequestException('Jumlah pengeluaran harus lebih dari 0');
+      }
+    }
+
+    const totalExpenses = items.reduce((sum, item) => sum + item.amount, 0);
+    const remainingAmount = typeof dto.remainingAmount === 'string' 
+      ? parseFloat(dto.remainingAmount) 
+      : dto.remainingAmount;
+    const budgetFunded = Number(event.budgetEstimated);
+
+    // Validate: total expenses + remaining = budget
+    const calculatedTotal = totalExpenses + remainingAmount;
+    if (Math.abs(calculatedTotal - budgetFunded) > 1) {
+      throw new BadRequestException(
+        `Total pengeluaran (Rp${totalExpenses.toLocaleString('id-ID')}) + sisa uang (Rp${remainingAmount.toLocaleString('id-ID')}) = Rp${calculatedTotal.toLocaleString('id-ID')} tidak sesuai dengan dana yang dicairkan (Rp${budgetFunded.toLocaleString('id-ID')}). Pastikan input sesuai dengan nota.`
       );
     }
 
-    return this.eventsRepo.createExpense({
-      eventId,
-      title: dto.title,
-      amount: dto.amount,
-      proofImage: dto.proofImage,
-    });
-  }
-
-  // ==========================================
-  // 8. VERIFY EXPENSE (Bendahara Cek & Sahkan Nota)
-  // ==========================================
-  async verifyExpense(
-    expenseId: string,
-    dto: VerifyExpenseDto,
-    user: ActiveUserData
-  ) {
-    const expense = await this.eventsRepo.findExpenseById(expenseId);
-    if (!expense) throw new NotFoundException('Data pengeluaran tidak ditemukan');
-
-    this.checkGroupAccess(expense.event.communityGroupId, user);
-
-    const verifierRoles: SystemRoleType[] = [SystemRoleType.ADMIN, SystemRoleType.LEADER, SystemRoleType.TREASURER];
-    if (!verifierRoles.includes(user.roleType)) {
-      throw new ForbiddenException('Hanya Bendahara atau Ketua yang dapat memvalidasi nota pengeluaran');
+    // Upload receipt images
+    const receiptImageUrls: string[] = [];
+    if (receiptFiles && receiptFiles.length > 0) {
+      for (const file of receiptFiles) {
+        const url = await this.storageService.uploadImage(file, 'receipts', 1200, 1200);
+        receiptImageUrls.push(url);
+      }
     }
 
-    return this.eventsRepo.verifyExpense(expenseId, dto.isValid, user.id);
+    // Create expense records (auto-verified since Treasurer is submitting)
+    for (const item of items) {
+      await this.eventsRepo.createExpense({
+        eventId,
+        title: item.title,
+        amount: item.amount,
+        proofImage: undefined,
+      });
+      // Auto-verify
+      const expenses = await this.prisma.eventExpense.findMany({
+        where: { eventId, title: item.title },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      });
+      if (expenses[0]) {
+        await this.eventsRepo.verifyExpense(expenses[0].id, true, user.id);
+      }
+    }
+
+    // Store receipt images on event
+    await this.prisma.event.update({
+      where: { id: eventId },
+      data: { 
+        receiptImages: receiptImageUrls,
+        budgetActual: totalExpenses,
+      },
+    });
+
+    // Update status to ONGOING
+    await this.eventsRepo.updateEventStatus(
+      eventId,
+      EventStatus.ONGOING,
+      user.id,
+      `Laporan pengeluaran diserahkan. Total belanja: Rp${totalExpenses.toLocaleString('id-ID')}. Sisa: Rp${remainingAmount.toLocaleString('id-ID')}. ${receiptImageUrls.length} bukti nota dilampirkan.`
+    );
+
+    // Refund remaining amount back to wallet if > 0
+    if (remainingAmount > 0) {
+      await this.financeService.refundEventFund(
+        event.communityGroupId,
+        remainingAmount,
+        event.id,
+        `Pengembalian sisa belanja acara: Rp${remainingAmount.toLocaleString('id-ID')}`
+      );
+      this.logger.log(`Sisa dana Rp${remainingAmount} event ${eventId} dikembalikan ke wallet.`);
+    }
+
+    return {
+      message: 'Laporan pengeluaran berhasil disubmit. Acara kini berstatus ONGOING.',
+      totalExpenses,
+      remainingAmount,
+      receiptImages: receiptImageUrls,
+    };
   }
 
   // ==========================================
-  // 9. SETTLE EVENT (Tutup Laporan & Hitung Kembalian)
+  // 8. EXTEND EVENT DATE (Leader/Admin, ONGOING)
   // ==========================================
-  async settleEvent(eventId: string, user: ActiveUserData) {
-    const event = await this.getEventDetails(eventId, user);
+  async extendEventDate(eventId: string, dto: ExtendEventDateDto, user: ActiveUserData) {
+    const event = await this.eventsRepo.findById(eventId);
+    if (!event) throw new NotFoundException('Acara tidak ditemukan');
+    await this.checkGroupAccess(event.communityGroupId, user);
 
-    const settleableStatuses: EventStatus[] = [EventStatus.ONGOING, EventStatus.COMPLETED];
-    if (!settleableStatuses.includes(event.status)) {
-      throw new BadRequestException('Hanya acara yang sedang berjalan atau selesai yang dapat ditutup laporannya');
+    if (event.status !== EventStatus.ONGOING) {
+      throw new BadRequestException('Waktu acara hanya dapat diperpanjang saat berstatus ONGOING');
     }
 
     const isCreator = event.createdById === user.id;
-    const canSettleRoles: SystemRoleType[] = [SystemRoleType.LEADER, SystemRoleType.ADMIN, SystemRoleType.TREASURER];
-    if (!isCreator && !canSettleRoles.includes(user.roleType)) {
-      throw new ForbiddenException('Anda tidak memiliki hak untuk menutup laporan acara ini');
+    const canExtendRoles: SystemRoleType[] = [SystemRoleType.LEADER, SystemRoleType.ADMIN];
+    if (!isCreator && !canExtendRoles.includes(user.roleType)) {
+      throw new ForbiddenException('Hanya pembuat acara atau pengurus yang dapat memperpanjang waktu');
     }
 
-    // 1. Hitung total uang yang BENAR-BENAR TERPAKAI (Valid Only)
-    const totalSpent = event.expenses
-      .filter(expense => expense.isValid === true)
-      .reduce((sum, expense) => sum + Number(expense.amount), 0);
-
-    // 2. Hitung total uang sisa
-    const totalFunded = Number(event.budgetEstimated);
-    const refundAmount = totalFunded - totalSpent;
-
-    if (refundAmount < 0) {
-      throw new BadRequestException(`Minus! Pengeluaran (Rp${totalSpent}) melebihi anggaran yang dicairkan (Rp${totalFunded}). Harap ajukan dana tambahan (Fund Request) terlebih dahulu.`);
+    const newEndDate = new Date(dto.endDate);
+    if (event.endDate && newEndDate <= new Date(event.endDate)) {
+      throw new BadRequestException('Tanggal selesai baru harus lebih besar dari tanggal selesai saat ini');
     }
 
-    // 3. Eksekusi Penutupan Laporan
-    await this.eventsRepo.updateActualBudget(eventId, totalSpent);
+    await this.eventsRepo.updateEvent(eventId, { endDate: newEndDate });
+
+    await this.eventsRepo.updateEventStatus(
+      eventId,
+      EventStatus.ONGOING,
+      user.id,
+      `Waktu acara diperpanjang hingga ${newEndDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`
+    );
+
+    return { message: 'Waktu acara berhasil diperpanjang', newEndDate };
+  }
+
+  // ==========================================
+  // 9. SETTLE EVENT (Leader/Admin, COMPLETED → SETTLED)
+  //    Input hasil event, foto hasil, deskripsi
+  // ==========================================
+  async settleEvent(
+    eventId: string,
+    user: ActiveUserData,
+    description: string,
+    resultFiles: Express.Multer.File[],
+  ) {
+    const event = await this.eventsRepo.findById(eventId);
+    if (!event) throw new NotFoundException('Acara tidak ditemukan');
+    await this.checkGroupAccess(event.communityGroupId, user);
+
+    if (event.status !== EventStatus.COMPLETED) {
+      throw new BadRequestException('Hanya acara berstatus COMPLETED yang dapat diselesaikan laporannya');
+    }
+
+    const canSettleRoles: SystemRoleType[] = [SystemRoleType.LEADER, SystemRoleType.ADMIN];
+    if (!canSettleRoles.includes(user.roleType)) {
+      throw new ForbiddenException('Hanya Ketua atau Admin yang dapat menyelesaikan laporan acara');
+    }
+
+    // Upload result photos
+    const resultImageUrls: string[] = [];
+    if (resultFiles && resultFiles.length > 0) {
+      for (const file of resultFiles) {
+        const url = await this.storageService.uploadImage(file, 'event-results', 1200, 1200);
+        resultImageUrls.push(url);
+      }
+    }
+
+    // Update event with results
+    await this.prisma.event.update({
+      where: { id: eventId },
+      data: {
+        resultDescription: description,
+        resultImages: resultImageUrls,
+      },
+    });
+
+    // Update status to SETTLED
+    const photoInfo = resultImageUrls.length > 0 
+      ? `${resultImageUrls.length} foto dokumentasi dilampirkan. ` 
+      : '';
 
     const settledEvent = await this.eventsRepo.updateEventStatus(
       eventId,
       EventStatus.SETTLED,
       user.id,
-      `Laporan ditutup. Total terpakai: Rp${totalSpent}. Sisa dana: Rp${refundAmount}`
+      `Laporan: ${description}. ${photoInfo}Acara telah diselesaikan.`
     );
-
-    // 👇 INTEGRASI FINANCE: PARTIAL REFUND (SISA UANG)
-    if (refundAmount > 0) {
-      await this.financeService.refundEventFund(
-        event.communityGroupId, 
-        refundAmount, 
-        event.id,
-        'Pengembalian sisa anggaran acara (Settlement)'
-      );
-      console.log(`[Finance Trigger] Sisa dana Rp${refundAmount} berhasil dikembalikan ke Wallet.`);
-    }
 
     return {
       message: 'Laporan acara berhasil ditutup',
-      budgetEstimated: totalFunded,
-      budgetActual: totalSpent,
-      refundedAmount: refundAmount,
+      resultImages: resultImageUrls,
       event: settledEvent
     };
+  }
+
+  // ==========================================
+  // HELPER: Auto-Complete expired ONGOING events
+  // ==========================================
+  private async autoCompleteExpiredEvents(groupIds: number[]) {
+    const expiredEvents = await this.prisma.event.findMany({
+      where: {
+        communityGroupId: { in: groupIds },
+        status: EventStatus.ONGOING,
+        endDate: { lte: new Date() },
+      },
+    });
+
+    for (const event of expiredEvents) {
+      await this.eventsRepo.updateEventStatus(
+        event.id,
+        EventStatus.COMPLETED,
+        event.createdById,
+        'Acara otomatis selesai karena telah melewati tanggal berakhir.'
+      );
+      this.logger.log(`Event ${event.id} auto-completed (endDate passed).`);
+    }
   }
 }

@@ -8,7 +8,10 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
+  UploadedFiles,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { SystemRoleType } from '@prisma/client';
 
 // Imports Decorator & Types
@@ -25,8 +28,8 @@ import { CreateEventDto } from '../dto/create-event.dto';
 import { UpdateEventDto } from '../dto/update-event.dto';
 import { ProcessApprovalDto } from '../dto/process-approval.dto';
 import { CancelEventDto } from '../dto/cancel-event.dto';
-import { SubmitExpenseDto } from '../dto/submit-expense.dto';
-import { VerifyExpenseDto } from '../dto/verify-expense.dto';
+import { SubmitExpenseReportDto } from '../dto/submit-expense-report.dto';
+import { ExtendEventDateDto } from '../dto/extend-event-date.dto';
 
 
 @Controller('events')
@@ -40,18 +43,17 @@ export class EventsController {
   // 1. ENDPOINT KHUSUS PENGURUS (CREATE & MANAGE)
   // ==========================================
 
-  @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createEvent(
     @ActiveUser() user: ActiveUserData,
     @Body() body: { data: CreateEventDto; committeeUserIds?: string[] }
   ) {
-    // Memisahkan data detail acara dan daftar panitia dari body request
     return this.eventsService.createEvent(body.data, user, body.committeeUserIds);
   }
 
-  @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
   @Patch(':id')
   async updateEvent(
     @Param('id') eventId: string,
@@ -71,25 +73,21 @@ export class EventsController {
     return this.eventsService.deleteEvent(eventId, user);
   }
 
-  @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
   @Post(':id/submit')
   @HttpCode(HttpStatus.OK)
   async submitEvent(
     @Param('id') eventId: string,
     @ActiveUser() user: ActiveUserData
   ) {
-    // 1. Ubah status menjadi SUBMITTED
-    await this.eventsService.submitEvent(eventId, user);
-
-    // 2. Mesin otomatis membaca anggaran dan membuat rantai persetujuan (RT/RW)
-    return this.eventApprovalService.generateApprovalWorkflow(eventId);
+    return this.eventsService.submitEvent(eventId, user);
   }
 
   // ==========================================
-  // 2. ENDPOINT APPROVAL (KHUSUS PENGURUS)
+  // 2. ENDPOINT APPROVAL (KHUSUS TREASURER)
   // ==========================================
 
-  @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)
+  @Roles(SystemRoleType.TREASURER)
   @Post(':id/approve')
   @HttpCode(HttpStatus.OK)
   async processApproval(
@@ -97,17 +95,15 @@ export class EventsController {
     @Body() processApprovalDto: ProcessApprovalDto,
     @ActiveUser() user: ActiveUserData
   ) {
-    // Logika validasi apakah "Bukan Giliran Anda" sudah ditangani di dalam Service
     return this.eventApprovalService.processApproval(eventId, user, processApprovalDto);
   }
 
-  // Jangan lupa import CancelEventDto di atas
   @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
   async cancelEvent(
     @Param('id') eventId: string,
-    @Body() cancelEventDto: CancelEventDto, // <-- REFACTOR DI SINI
+    @Body() cancelEventDto: CancelEventDto,
     @ActiveUser() user: ActiveUserData
   ) {
     return this.eventsService.cancelEvent(eventId, cancelEventDto.reason, user);
@@ -117,11 +113,8 @@ export class EventsController {
   // 3. ENDPOINT PUBLIK / WARGA (TRANSPARANSI)
   // ==========================================
 
-  // Tidak memakai @Roles() agar warga (RESIDENT) bisa mengaksesnya
   @Get()
   async getAllEvents(@ActiveUser() user: ActiveUserData) {
-    // Warga hanya akan melihat data dari lingkungan RT/RW mereka sendiri
-    // dan acara berstatus DRAFT akan disembunyikan otomatis oleh Service
     return this.eventsService.findAllEvents(user);
   }
 
@@ -134,38 +127,51 @@ export class EventsController {
   }
 
   // ==========================================
-  // 4. EXPENSE MANAGEMENT
+  // 4. EXPENSE REPORT (Treasurer, FUNDED → ONGOING)
+  //    Upload bukti nota + daftar belanja + sisa uang
   // ==========================================
   @Roles(SystemRoleType.TREASURER)
-  @Post(':id/expenses')
-  @HttpCode(HttpStatus.CREATED)
-  async submitExpense(
-    @Param('id') eventId: string,
-    @Body() dto: SubmitExpenseDto,
-    @ActiveUser() user: ActiveUserData
-  ) {
-    return this.eventsService.submitEventExpense(eventId, dto, user);
-  }
-
-  @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
-  @Patch('expenses/:expenseId/verify')
+  @Post(':id/expense-report')
   @HttpCode(HttpStatus.OK)
-  async verifyExpense(
-    @Param('expenseId') expenseId: string,
-    @Body() dto: VerifyExpenseDto,
-    @ActiveUser() user: ActiveUserData
+  @UseInterceptors(FilesInterceptor('receipts', 10))
+  async submitExpenseReport(
+    @Param('id') eventId: string,
+    @Body() dto: SubmitExpenseReportDto,
+    @UploadedFiles() receiptFiles: Express.Multer.File[],
+    @ActiveUser() user: ActiveUserData,
   ) {
-    return this.eventsService.verifyExpense(expenseId, dto, user);
+    return this.eventsService.submitExpenseReport(eventId, dto, receiptFiles || [], user);
   }
 
+  // ==========================================
+  // 5. EXTEND EVENT DATE (Leader/Admin, ONGOING)
+  // ==========================================
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.LEADER)
+  @Patch(':id/extend-date')
+  @HttpCode(HttpStatus.OK)
+  async extendEventDate(
+    @Param('id') eventId: string,
+    @Body() dto: ExtendEventDateDto,
+    @ActiveUser() user: ActiveUserData
+  ) {
+    return this.eventsService.extendEventDate(eventId, dto, user);
+  }
+
+  // ==========================================
+  // 6. SETTLE EVENT (Leader/Admin, COMPLETED → SETTLED)
+  //    Upload foto hasil + deskripsi laporan
+  // ==========================================
   @Roles(SystemRoleType.LEADER, SystemRoleType.ADMIN)
   @Post(':id/settle')
   @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FilesInterceptor('photos', 10))
   async settleEvent(
     @Param('id') eventId: string,
-    @ActiveUser() user: ActiveUserData
+    @Body('description') description: string,
+    @UploadedFiles() resultFiles: Express.Multer.File[],
+    @ActiveUser() user: ActiveUserData,
   ) {
-    return this.eventsService.settleEvent(eventId, user);
+    return this.eventsService.settleEvent(eventId, user, description, resultFiles || []);
   }
 
 }

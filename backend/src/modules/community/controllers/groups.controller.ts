@@ -61,6 +61,17 @@ export class GroupsController {
   }
 
   /**
+   * FIX MISSING APPROVAL RULES
+   * Buat default ApprovalRules untuk semua group yang belum memiliki rules.
+   * Security: Hanya LEADER (RW)
+   */
+  @Post('fix-approval-rules')
+  @Roles(SystemRoleType.LEADER)
+  fixApprovalRules() {
+    return this.groupsService.fixMissingApprovalRules();
+  }
+
+  /**
    * FIND ONE
    * Security: Semua User Login
    */

@@ -22,7 +22,6 @@ import {
   Clock,
   AlertTriangle,
   Trophy,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
@@ -167,127 +166,164 @@ export default function ResidentDashboard() {
       </div>
 
       {/* === PENDING PAYMENT REMINDER === */}
+      {/* === WARNING: Pembayaran Menunggu (Pending) === */}
       {!loading && pendingPayments.length > 0 && (
-        <Card className="border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 overflow-hidden shadow-md animate-in slide-in-from-top duration-500">
-          <CardContent className="p-0">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-5 sm:p-6">
-              <div className="h-12 w-12 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-                <AlertTriangle className="h-6 w-6 text-amber-600" />
+        <Card className="relative overflow-hidden border-0 ring-1 ring-amber-200/50 bg-white shadow-[0_2px_10px_-3px_rgba(251,191,36,0.2)] rounded-2xl animate-in slide-in-from-top duration-500">
+          {/* Aksent Top Bar */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-amber-400"></div>
+
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-500 ring-1 ring-amber-100">
+                <AlertTriangle className="h-6 w-6" strokeWidth={2.5} />
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-amber-800 font-poppins">
-                  Pembayaran Menunggu Penyelesaian
+
+              <div className="flex-1 space-y-1">
+                <h3 className="text-base font-semibold text-slate-900 font-poppins tracking-tight">
+                  Menunggu Pembayaran
+                </h3>
+                <p className="text-sm text-slate-500 leading-relaxed max-w-lg">
+                  Anda memiliki <span className="font-medium text-amber-600">{pendingPayments.length} transaksi</span> yang belum diselesaikan. Segera selesaikan agar iuran tercatat.
                 </p>
-                <p className="text-xs text-amber-600 mt-1">
-                  Anda memiliki {pendingPayments.length} pembayaran iuran yang belum diselesaikan.
-                  Segera selesaikan agar iuran tercatat.
-                </p>
-                <div className="mt-2 space-y-1">
+
+                {/* List Transaksi Pending */}
+                <div className="mt-3 space-y-2 max-w-sm border-l-2 border-amber-200 pl-3">
                   {pendingPayments.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between text-xs">
-                      <span className="text-amber-700 flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {p.orderId.length > 30 ? p.orderId.substring(0, 30) + "..." : p.orderId}
-                      </span>
-                      <span className="font-semibold text-amber-800">{formatRupiah(Number(p.amount))}</span>
+                    <div key={p.id} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <Clock className="h-3.5 w-3.5 text-amber-500" />
+                        <span className="font-mono text-xs">{p.orderId.length > 20 ? p.orderId.substring(0, 20) + "..." : p.orderId}</span>
+                      </div>
+                      <span className="font-semibold text-slate-800">{formatRupiah(Number(p.amount))}</span>
                     </div>
                   ))}
                 </div>
               </div>
+
               <Button
-                className="bg-amber-600 hover:bg-amber-700 text-white shadow-lg shadow-amber-200 shrink-0 w-full sm:w-auto"
+                className="w-full sm:w-auto mt-4 sm:mt-0 bg-amber-500 hover:bg-amber-600 text-white shadow-sm shadow-amber-200 rounded-xl"
                 onClick={() => navigate("/dashboard/pembayaran-warga")}
               >
                 <CreditCard className="h-4 w-4 mr-2" />
                 Bayar Sekarang
-                <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* === TAGIHAN IURAN (Prominent) === */}
+      {/* === MAIN CARDS: Status Tagihan === */}
       {loading ? (
-        <Skeleton className="h-40 w-full rounded-xl" />
+        <Skeleton className="h-32 w-full rounded-2xl" />
       ) : hasUnpaidBill ? (
-        <Card className="border-red-200 bg-gradient-to-br from-red-50 to-orange-50 overflow-hidden">
-          <CardContent className="p-0">
-            <div className="flex flex-col sm:flex-row">
-              <div className="flex-1 p-5 sm:p-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="h-8 w-8 rounded-lg bg-red-100 flex items-center justify-center">
-                    <AlertCircle className="h-4 w-4 text-red-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-red-800 font-poppins">Tagihan Iuran Bulanan</p>
-                    <p className="text-xs text-red-500">{bill?.dueDateDescription}</p>
-                  </div>
+
+        /* CARD 1: ADA TAGIHAN (DANGER/WARNING) */
+        <Card className="relative overflow-hidden border-0 ring-1 ring-red-100 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-2xl">
+          <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-red-500"></div>
+
+          <CardContent className="p-6 sm:p-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+
+              <div className="flex items-start gap-4 flex-1">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+                  <AlertCircle className="h-6 w-6" strokeWidth={2.5} />
                 </div>
-                <div className="text-3xl sm:text-4xl font-bold text-red-700 mb-3 font-poppins">
-                  {formatRupiah(bill?.totalAmount || 0)}
-                </div>
-                {bill?.breakdown && bill.breakdown.length > 0 && (
-                  <div className="space-y-1.5 mb-4">
-                    {bill.breakdown.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-sm">
-                        <span className="text-red-600/80">Iuran {item.type} — {item.groupName}</span>
-                        <span className="font-semibold text-red-700">{formatRupiah(item.amount)}</span>
+                <div className="space-y-1">
+                  <h3 className="text-base font-semibold text-slate-900 font-poppins tracking-tight">
+                    Tagihan Iuran Bulanan
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    {bill?.dueDateDescription || "Segera lunasi iuran bulan ini"}
+                  </p>
+
+                  {/* Total & Breakdown */}
+                  <div className="pt-2">
+                    <p className="text-3xl sm:text-4xl font-bold text-slate-900 font-poppins tracking-tight">
+                      {formatRupiah(bill?.totalAmount || 0)}
+                    </p>
+                    {bill?.breakdown && bill.breakdown.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {bill.breakdown.map((item, idx) => (
+                          <div key={idx} className="inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200/50">
+                            <span className="text-slate-400">Iuran {item.type}</span>
+                            <span className="text-slate-900">{formatRupiah(item.amount)}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
+                </div>
+              </div>
+
+              <div className="w-full md:w-auto shrink-0 border-t border-slate-100 md:border-t-0 pt-5 md:pt-0">
                 <Button
-                  className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200 w-full sm:w-auto"
+                  size="lg"
+                  className="w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-white rounded-xl h-12 px-8"
                   onClick={() => navigate("/dashboard/pembayaran-warga")}
                 >
                   <CreditCard className="h-4 w-4 mr-2" />
                   Bayar Sekarang
-                  <ArrowRight className="h-4 w-4 ml-2" />
+                  <ArrowRight className="h-4 w-4 ml-2 opacity-70" />
                 </Button>
               </div>
+
             </div>
           </CardContent>
         </Card>
+
       ) : paidFullYear ? (
-        <Card className="border-amber-300 bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 overflow-hidden shadow-sm">
-          <CardContent className="p-0">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-5 sm:p-6">
-              <div className="relative shrink-0">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center shadow-lg shadow-amber-200">
-                  <Trophy className="h-7 w-7 text-white" />
-                </div>
-                <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-yellow-400 flex items-center justify-center">
-                  <Sparkles className="h-3 w-3 text-white" />
-                </div>
+
+        /* CARD 2: LUNAS SETAHUN (SUCCESS/CELEBRATION) */
+        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md rounded-2xl">
+          {/* Decorative Pattern / Glow */}
+          <div className="absolute top-0 right-0 -mt-4 -mr-4 h-32 w-32 rounded-full bg-white/10 blur-2xl"></div>
+          <div className="absolute bottom-0 left-0 -mb-4 -ml-4 h-24 w-24 rounded-full bg-black/5 blur-xl"></div>
+
+          <CardContent className="relative p-6 sm:p-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm ring-1 ring-white/30 shadow-inner">
+                <Trophy className="h-8 w-8 text-white" strokeWidth={2} />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-bold text-amber-800 font-poppins">Iuran Lunas Setahun Penuh! 🎉</p>
-                  <span className="text-[10px] font-semibold bg-amber-400 text-white px-2 py-0.5 rounded-full">{currentYear}</span>
+
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h3 className="text-lg sm:text-xl font-bold font-poppins tracking-tight">
+                    Iuran Lunas Setahun Penuh! 🎉
+                  </h3>
+                  <span className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold backdrop-blur-sm ring-1 ring-inset ring-white/20">
+                    Tahun {currentYear}
+                  </span>
                 </div>
-                <p className="text-xs text-amber-700 mt-1">
-                  Selamat! Seluruh iuran Anda di tahun <span className="font-semibold">{currentYear}</span> telah lunas. Terima kasih atas dedikasi Anda untuk lingkungan.
+                <p className="text-sm sm:text-base text-white/90 leading-relaxed max-w-2xl">
+                  Selamat! Seluruh kewajiban iuran Anda di tahun <strong>{currentYear}</strong> telah selesai. Terima kasih atas dedikasi Anda untuk memajukan lingkungan.
                 </p>
-                <p className="text-xs text-amber-600 mt-2 flex items-center gap-1.5">
-                  <Megaphone className="h-3.5 w-3.5 shrink-0" />
-                  Pantau terus <span className="font-semibold">MarinaKas</span> untuk mendapatkan informasi terbaru seputar kegiatan dan acara warga!
-                </p>
+
+                <div className="inline-flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-black/10 backdrop-blur-sm text-xs font-medium text-white/90">
+                  <Megaphone className="h-3.5 w-3.5" />
+                  <span>Pantau terus MarinaKas untuk event lingkungan terbaru.</span>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
+
       ) : (
-        <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50">
-          <CardContent className="py-5 px-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+
+        /* CARD 3: LUNAS BULAN INI (SUCCESS/CLEAN) */
+        <Card className="relative overflow-hidden border-0 ring-1 ring-emerald-100 bg-white shadow-sm rounded-2xl">
+          <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-emerald-500"></div>
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="h-6 w-6" strokeWidth={2.5} />
               </div>
               <div>
-                <p className="text-sm font-semibold text-emerald-800 font-poppins">Iuran Lunas</p>
-                <p className="text-xs text-emerald-600">
-                  Tidak ada tagihan iuran untuk saat ini. Terima kasih!
+                <h3 className="text-base font-semibold text-slate-900 font-poppins tracking-tight">
+                  Status Iuran Terkini
+                </h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Anda tidak memiliki tagihan tertunggak saat ini. Terima kasih!
                 </p>
               </div>
             </div>

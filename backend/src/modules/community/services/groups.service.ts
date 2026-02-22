@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { SystemRoleType, CommunityGroup } from '@prisma/client';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { SystemRoleType, CommunityGroup, Prisma } from '@prisma/client';
 
 import { GroupsRepository } from '../repositories/groups.repository';
-import { PrismaService } from '../../../database/prisma.service'; // Akses langsung Prisma untuk helper query
+import { PrismaService } from '../../../database/prisma.service';
 
 import { CreateGroupDto } from '../dto/create-group.dto';
 import { UpdateGroupDto } from '../dto/update-group.dto';
@@ -11,10 +11,12 @@ import { ActiveUserData } from '@common/decorators/active-user.decorator';
 
 @Injectable()
 export class GroupsService {
+  private readonly logger = new Logger(GroupsService.name);
+
   constructor(
     private readonly groupsRepository: GroupsRepository,
-    private readonly prisma: PrismaService, // Inject PrismaService
-  ) {}
+    private readonly prisma: PrismaService,
+  ) { }
 
   /**
    * CREATE GROUP
@@ -24,12 +26,10 @@ export class GroupsService {
    * Atau nanti bisa dikirim via DTO.
    */
   async create(dto: CreateGroupDto, user?: ActiveUserData): Promise<CommunityGroup> {
-    
+
     let parentId: number | null = null;
 
-    // Logic: Jika membuat RT, otomatis kaitkan ke RW yang ada
     if (dto.type === 'RT') {
-      // Cari RW pertama yang ada di database (Sistem Single RW)
       const parentRw = await this.prisma.communityGroup.findFirst({
         where: { type: 'RW' },
       });
@@ -40,11 +40,21 @@ export class GroupsService {
       parentId = parentRw.id;
     }
 
-    return this.groupsRepository.createWithWallet({
-      name: dto.name,
-      type: dto.type,
-      // Hubungkan ke Parent (RW) jika ini RT
-      parent: parentId ? { connect: { id: parentId } } : undefined,
+    // Gunakan transaction: buat group + wallet + default approval rules
+    return this.prisma.$transaction(async (tx) => {
+      const group = await tx.communityGroup.create({
+        data: {
+          name: dto.name,
+          type: dto.type,
+          parent: parentId ? { connect: { id: parentId } } : undefined,
+          wallet: { create: { balance: 0 } },
+        },
+      });
+
+      // Auto-create default approval rules
+      await this.createDefaultApprovalRules(group.id, group.type, tx);
+
+      return group;
     });
   }
 
@@ -124,9 +134,9 @@ export class GroupsService {
     });
 
     if (!group) throw new NotFoundException('Group tidak ditemukan');
-    
+
     // Jika ini RW, maka tidak punya parent treasurer (Logic berhenti)
-    if (group.type === 'RW') return null; 
+    if (group.type === 'RW') return null;
 
     if (!group.parentId) {
       // RT yatim piatu (Data tidak konsisten)
@@ -188,6 +198,7 @@ export class GroupsService {
             fullName: true,
             email: true,
             phone: true,
+            profileImage: true, // <--- 1. TAMBAHKAN INI DI RW USERS
             role: { select: { type: true } },
           },
         },
@@ -204,6 +215,7 @@ export class GroupsService {
                 fullName: true,
                 email: true,
                 phone: true,
+                profileImage: true, // <--- 2. TAMBAHKAN INI DI RT USERS
                 role: { select: { type: true } },
               },
             },
@@ -225,8 +237,9 @@ export class GroupsService {
         name: rwGroup.name,
         type: 'RW' as const,
         memberCount: rwGroup._count.users,
-        leader: leader ? { id: leader.id, fullName: leader.fullName, email: leader.email, phone: leader.phone } : null,
-        treasurer: rwTreasurer ? { id: rwTreasurer.id, fullName: rwTreasurer.fullName, email: rwTreasurer.email, phone: rwTreasurer.phone } : null,
+        // 3. Masukkan profileImage ke dalam hasil return map-nya
+        leader: leader ? { id: leader.id, fullName: leader.fullName, email: leader.email, phone: leader.phone, profileImage: leader.profileImage } : null,
+        treasurer: rwTreasurer ? { id: rwTreasurer.id, fullName: rwTreasurer.fullName, email: rwTreasurer.email, phone: rwTreasurer.phone, profileImage: rwTreasurer.profileImage } : null,
       },
       rtGroups: rwGroup.children.map((rt) => {
         const admin = rt.users.find((u) => u.role.type === 'ADMIN');
@@ -236,10 +249,124 @@ export class GroupsService {
           name: rt.name,
           type: 'RT' as const,
           memberCount: rt._count.users,
-          admin: admin ? { id: admin.id, fullName: admin.fullName, email: admin.email, phone: admin.phone } : null,
-          treasurer: rtTreasurer ? { id: rtTreasurer.id, fullName: rtTreasurer.fullName, email: rtTreasurer.email, phone: rtTreasurer.phone } : null,
+          // 4. Masukkan profileImage ke dalam hasil return map RT-nya
+          admin: admin ? { id: admin.id, fullName: admin.fullName, email: admin.email, phone: admin.phone, profileImage: admin.profileImage } : null,
+          treasurer: rtTreasurer ? { id: rtTreasurer.id, fullName: rtTreasurer.fullName, email: rtTreasurer.email, phone: rtTreasurer.phone, profileImage: rtTreasurer.profileImage } : null,
         };
       }),
+    };
+  }
+
+  // ==========================================
+  // DEFAULT APPROVAL RULES
+  // ==========================================
+
+  /**
+   * Buat default ApprovalRules untuk sebuah CommunityGroup.
+   * - RT: Step 1 = TREASURER, Step 2 = ADMIN
+   * - RW: Step 1 = TREASURER, Step 2 = LEADER
+   * 
+   * @param groupId - ID CommunityGroup
+   * @param groupType - 'RT' atau 'RW'
+   * @param tx - Prisma transaction client (opsional, fallback ke this.prisma)
+   */
+  async createDefaultApprovalRules(
+    groupId: number,
+    groupType: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<number> {
+    const client = tx || this.prisma;
+
+    // Tentukan role yang dibutuhkan berdasarkan tipe group
+    const roleSteps: { type: SystemRoleType; stepOrder: number }[] =
+      groupType === 'RW'
+        ? [
+          { type: SystemRoleType.TREASURER, stepOrder: 1 },
+          { type: SystemRoleType.LEADER, stepOrder: 2 },
+        ]
+        : [
+          { type: SystemRoleType.TREASURER, stepOrder: 1 },
+          { type: SystemRoleType.ADMIN, stepOrder: 2 },
+        ];
+
+    // Query roleId berdasarkan SystemRoleType (JANGAN hardcode angka!)
+    const roles = await client.role.findMany({
+      where: { type: { in: roleSteps.map((r) => r.type) } },
+    });
+
+    const roleMap = new Map(roles.map((r) => [r.type, r.id]));
+
+    const rulesToCreate = roleSteps
+      .filter((step) => {
+        const roleId = roleMap.get(step.type);
+        if (!roleId) {
+          this.logger.warn(
+            `Role ${step.type} tidak ditemukan di database, skip step ${step.stepOrder} untuk group ${groupId}`,
+          );
+          return false;
+        }
+        return true;
+      })
+      .map((step) => ({
+        communityGroupId: groupId,
+        roleId: roleMap.get(step.type)!,
+        stepOrder: step.stepOrder,
+        isMandatory: true,
+        isCrossGroup: false,
+        minAmount: null,
+      }));
+
+    if (rulesToCreate.length === 0) {
+      this.logger.warn(
+        `Tidak ada role yang valid untuk membuat ApprovalRules di group ${groupId}`,
+      );
+      return 0;
+    }
+
+    // Gunakan skipDuplicates agar aman dipanggil berulang (idempotent)
+    const result = await client.approvalRule.createMany({
+      data: rulesToCreate,
+      skipDuplicates: true,
+    });
+
+    this.logger.log(
+      `Default ApprovalRules dibuat untuk group ${groupId} (${groupType}): ${result.count} rules`,
+    );
+
+    return result.count;
+  }
+
+  /**
+   * Fix: Buat default ApprovalRules untuk semua group yang belum memiliki rules.
+   * Mengembalikan jumlah group yang diperbaiki.
+   */
+  async fixMissingApprovalRules(): Promise<{ fixedGroups: number; totalRulesCreated: number }> {
+    // Cari semua group yang belum punya ApprovalRule
+    const groupsWithoutRules = await this.prisma.communityGroup.findMany({
+      where: {
+        approvalRules: { none: {} },
+      },
+      select: { id: true, type: true, name: true },
+    });
+
+    if (groupsWithoutRules.length === 0) {
+      return { fixedGroups: 0, totalRulesCreated: 0 };
+    }
+
+    let totalRulesCreated = 0;
+
+    // Proses dalam satu transaksi
+    await this.prisma.$transaction(async (tx) => {
+      for (const group of groupsWithoutRules) {
+        const count = await this.createDefaultApprovalRules(group.id, group.type, tx);
+        totalRulesCreated += count;
+        this.logger.log(`Fixed: ${group.name} (${group.type}) - ${count} rules created`);
+      }
+    });
+
+    return {
+      fixedGroups: groupsWithoutRules.length,
+      totalRulesCreated,
     };
   }
 }

@@ -40,20 +40,20 @@ const eventStatusLabel = (status: string) => {
   return labels[status] || status;
 };
 
-const eventStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
-  const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    DRAFT: "outline",
-    SUBMITTED: "secondary",
-    UNDER_REVIEW: "secondary",
-    REJECTED: "destructive",
-    APPROVED: "default",
-    CANCELLED: "destructive",
-    FUNDED: "default",
-    ONGOING: "default",
-    COMPLETED: "default",
-    SETTLED: "default",
+const eventStatusClassName = (status: string): string => {
+  const classes: Record<string, string> = {
+    DRAFT: "bg-slate-100 text-slate-600 border-slate-200",
+    SUBMITTED: "bg-amber-50 text-amber-700 border-amber-200",
+    UNDER_REVIEW: "bg-yellow-50 text-yellow-700 border-yellow-200",
+    APPROVED: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    REJECTED: "bg-red-50 text-red-700 border-red-200",
+    CANCELLED: "bg-rose-50 text-rose-700 border-rose-200",
+    FUNDED: "bg-blue-50 text-blue-700 border-blue-200",
+    ONGOING: "bg-purple-50 text-purple-700 border-purple-200",
+    COMPLETED: "bg-teal-50 text-teal-700 border-teal-200",
+    SETTLED: "bg-green-50 text-green-700 border-green-200",
   };
-  return variants[status] || "outline";
+  return classes[status] || "bg-slate-50 text-slate-600 border-slate-200";
 };
 
 interface EventHeaderProps {
@@ -71,7 +71,7 @@ export function EventHeader({ event }: EventHeaderProps) {
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 font-poppins">
                   {event.title}
                 </h1>
-                <Badge variant={eventStatusVariant(event.status)}>
+                <Badge variant="outline" className={eventStatusClassName(event.status)}>
                   {eventStatusLabel(event.status)}
                 </Badge>
               </div>

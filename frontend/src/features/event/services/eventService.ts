@@ -1,6 +1,7 @@
 // Event-related API operations
 import { api } from "@/shared/lib/axios";
-import type { ApiResponse, EventItem } from "@/shared/types";
+import type { ApiResponse } from "@/shared/types";
+import type { EventItem, FundRequestItem, SettleResult, ExpenseReportResult } from "@/features/event/types";
 
 export const eventService = {
   /** Get list of events */
@@ -47,28 +48,81 @@ export const eventService = {
     await api.delete(`/events/${id}`);
   },
 
-  /** Approve/Reject event */
-  processApproval: async (id: string, data: { status: string; notes?: string }): Promise<void> => {
-    await api.post(`/events/${id}/approve`, data);
-  },
-
-  /** Cancel event */
-  cancel: async (id: string): Promise<void> => {
-    await api.post(`/events/${id}/cancel`);
-  },
-
-  /** Cancel event with reason */
-  cancelWithReason: async (id: string, reason: string): Promise<void> => {
-    await api.post(`/events/${id}/cancel`, { reason });
-  },
-
-  /** Submit event for approval */
+  /** Submit event for approval (DRAFT -> SUBMITTED) */
   submit: async (id: string): Promise<void> => {
     await api.post(`/events/${id}/submit`);
   },
 
-  /** Submit expense (TREASURER only) */
-  submitExpense: async (id: string, data: { title: string; amount: number; proofImage?: string }): Promise<void> => {
-    await api.post(`/events/${id}/expenses`, data);
+  /** Approve/Reject event (TREASURER only) */
+  processApproval: async (id: string, data: { status: string; notes?: string }): Promise<void> => {
+    await api.post(`/events/${id}/approve`, data);
+  },
+
+  /** Cancel event with reason */
+  cancel: async (id: string, reason: string): Promise<void> => {
+    await api.post(`/events/${id}/cancel`, { reason });
+  },
+
+  /** Submit expense report with receipt files (TREASURER, FUNDED → ONGOING) */
+  submitExpenseReport: async (
+    id: string,
+    items: { title: string; amount: number }[],
+    remainingAmount: number,
+    receiptFiles: File[],
+  ): Promise<ExpenseReportResult> => {
+    const formData = new FormData();
+    formData.append("items", JSON.stringify(items));
+    formData.append("remainingAmount", String(remainingAmount));
+    for (const file of receiptFiles) {
+      formData.append("receipts", file);
+    }
+    const response = await api.post<ApiResponse<ExpenseReportResult>>(
+      `/events/${id}/expense-report`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+    return response.data.data;
+  },
+
+  /** Extend event end date (ONGOING only) */
+  extendDate: async (id: string, endDate: string): Promise<void> => {
+    await api.patch(`/events/${id}/extend-date`, { endDate });
+  },
+
+  /** Settle event with report photos (Leader/Admin, COMPLETED → SETTLED) */
+  settle: async (id: string, description: string, photoFiles: File[]): Promise<SettleResult> => {
+    const formData = new FormData();
+    formData.append("description", description);
+    for (const file of photoFiles) {
+      formData.append("photos", file);
+    }
+    const response = await api.post<ApiResponse<SettleResult>>(
+      `/events/${id}/settle`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+    return response.data.data;
+  },
+
+  /** Get fund requests */
+  getFundRequests: async (): Promise<FundRequestItem[]> => {
+    const response = await api.get<ApiResponse<FundRequestItem[]>>("/fund-requests");
+    return response.data.data;
+  },
+
+  /** Create fund request */
+  createFundRequest: async (data: { amount: number; description: string; eventId?: string }): Promise<FundRequestItem> => {
+    const response = await api.post<ApiResponse<FundRequestItem>>("/fund-requests", data);
+    return response.data.data;
+  },
+
+  /** Approve fund request */
+  approveFundRequest: async (id: string): Promise<void> => {
+    await api.post(`/fund-requests/${id}/approve`);
+  },
+
+  /** Reject fund request */
+  rejectFundRequest: async (id: string, data: { reason: string; rwDecision: string }): Promise<void> => {
+    await api.post(`/fund-requests/${id}/reject`, data);
   },
 };

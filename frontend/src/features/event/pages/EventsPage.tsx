@@ -13,22 +13,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import {
     CalendarDays,
     Search,
-    CheckCircle2,
     Clock,
     Plus,
+    Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { eventService } from "@/features/event/services/eventService";
 import { userService } from "@/shared/services/userService";
 import type { EventItem, UserItem } from "@/shared/types";
+import type { EventStatusType } from "@/features/event/types";
 import { DateRangeFilter } from "@/shared/components/DateRangeFilter";
 import type { DateRange } from "@/shared/components/DateRangeFilter";
 import {
     CreateEventDialog,
-    EditEventDialog,
-    ApprovalDialog,
     EventsTable,
 } from "@/features/event/components";
+
+const PENDING_STATUSES: EventStatusType[] = ["SUBMITTED"];
+const ACTIVE_STATUSES: EventStatusType[] = ["FUNDED", "ONGOING"];
+const DONE_STATUSES: EventStatusType[] = ["COMPLETED", "SETTLED", "REJECTED", "CANCELLED"];
 
 export default function EventsPage() {
     const navigate = useNavigate();
@@ -48,20 +51,10 @@ export default function EventsPage() {
         return `/dashboard/events/${id}`;
     };
 
-    // Approval Dialog
-    const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
-    const [approvalAction, setApprovalAction] = useState<"approve" | "reject" | null>(null);
-    const [approvalNotes, setApprovalNotes] = useState("");
-    const [submitting, setSubmitting] = useState(false);
-
     // Create Event Dialog
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [allUsers, setAllUsers] = useState<UserItem[]>([]);
     const [creatingEvent, setCreatingEvent] = useState(false);
-
-    // Edit Event Dialog
-    const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
-    const [editingEventSubmitting, setEditingEventSubmitting] = useState(false);
 
     useEffect(() => {
         fetchEvents();
@@ -126,94 +119,15 @@ export default function EventsPage() {
             }
         }
         if (activeTab === "semua") return true;
-        if (activeTab === "menunggu") return e.status === "PENDING_APPROVAL";
-        if (activeTab === "aktif") return e.status === "APPROVED" || e.status === "IN_PROGRESS";
-        if (activeTab === "selesai") return e.status === "COMPLETED" || e.status === "CANCELLED" || e.status === "REJECTED";
+        if (activeTab === "menunggu") return PENDING_STATUSES.includes(e.status);
+        if (activeTab === "aktif") return ACTIVE_STATUSES.includes(e.status);
+        if (activeTab === "selesai") return DONE_STATUSES.includes(e.status);
+        if (activeTab === "draft") return e.status === "DRAFT";
         return true;
     });
 
-    const pendingCount = events.filter((e) => e.status === "PENDING_APPROVAL").length;
-    const activeCount = events.filter((e) => e.status === "APPROVED" || e.status === "IN_PROGRESS").length;
-
-    // === Handle Approval ===
-    const handleApproval = async () => {
-        if (!selectedEvent || !approvalAction) return;
-        setSubmitting(true);
-        try {
-            await eventService.processApproval(selectedEvent.id, {
-                status: approvalAction === "approve" ? "APPROVED" : "REJECTED",
-                notes: approvalNotes || undefined,
-            });
-            toast.success(
-                approvalAction === "approve"
-                    ? "Kegiatan berhasil disetujui!"
-                    : "Kegiatan berhasil ditolak."
-            );
-            setSelectedEvent(null);
-            setApprovalAction(null);
-            setApprovalNotes("");
-            fetchEvents();
-        } catch (err: unknown) {
-            const message =
-                (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-            toast.error(message || "Gagal memproses persetujuan.");
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    // === Handle Cancel ===
-    const handleCancel = async (event: EventItem) => {
-        if (!confirm(`Yakin ingin membatalkan kegiatan "${event.title}"?`)) return;
-        try {
-            await eventService.cancel(event.id);
-            toast.success("Kegiatan berhasil dibatalkan.");
-            fetchEvents();
-        } catch {
-            toast.error("Gagal membatalkan kegiatan.");
-        }
-    };
-
-    const openApprovalDialog = (event: EventItem, action: "approve" | "reject") => {
-        setSelectedEvent(event);
-        setApprovalAction(action);
-        setApprovalNotes("");
-    };
-
-    // === Handle Edit Event ===
-    const openEditDialog = (event: EventItem) => {
-        setEditingEvent(event);
-    };
-
-    const handleEditEvent = async (eventId: string, payload: Parameters<typeof eventService.update>[1]) => {
-        setEditingEventSubmitting(true);
-        try {
-            await eventService.update(eventId, payload);
-            toast.success("Kegiatan berhasil diperbarui!");
-            setEditingEvent(null);
-            fetchEvents();
-        } catch (err: unknown) {
-            const message =
-                (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-            toast.error(message || "Gagal memperbarui kegiatan.");
-        } finally {
-            setEditingEventSubmitting(false);
-        }
-    };
-
-    // === Handle Delete Event ===
-    const handleDeleteEvent = async (event: EventItem) => {
-        if (!confirm(`Yakin ingin menghapus kegiatan "${event.title}"? Aksi ini tidak dapat dibatalkan.`)) return;
-        try {
-            await eventService.delete(event.id);
-            toast.success("Kegiatan berhasil dihapus.");
-            fetchEvents();
-        } catch (err: unknown) {
-            const message =
-                (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-            toast.error(message || "Gagal menghapus kegiatan.");
-        }
-    };
+    const pendingCount = events.filter((e) => PENDING_STATUSES.includes(e.status)).length;
+    const activeCount = events.filter((e) => ACTIVE_STATUSES.includes(e.status)).length;
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -267,7 +181,7 @@ export default function EventsPage() {
                         <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">
                             Aktif
                         </CardTitle>
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        <Zap className="h-4 w-4 text-emerald-500" />
                     </CardHeader>
                     <CardContent>
                         {loading ? <Skeleton className="h-8 w-12" /> : (
@@ -282,6 +196,7 @@ export default function EventsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <TabsList>
                         <TabsTrigger value="semua">Semua</TabsTrigger>
+                        <TabsTrigger value="draft">Draft</TabsTrigger>
                         <TabsTrigger value="menunggu">
                             Menunggu {pendingCount > 0 && `(${pendingCount})`}
                         </TabsTrigger>
@@ -312,31 +227,9 @@ export default function EventsPage() {
                         loading={loading}
                         searchQuery={search}
                         onEventClick={(id) => navigate(getEventDetailPath(id))}
-                        onEdit={openEditDialog}
-                        onDelete={handleDeleteEvent}
-                        onApprove={(event) => openApprovalDialog(event, "approve")}
-                        onReject={(event) => openApprovalDialog(event, "reject")}
-                        onCancel={handleCancel}
                     />
                 </TabsContent>
             </Tabs>
-
-            {/* === Approval Dialog === */}
-            {selectedEvent && approvalAction && (
-                <ApprovalDialog
-                    event={selectedEvent}
-                    action={approvalAction}
-                    onClose={() => {
-                        setSelectedEvent(null);
-                        setApprovalAction(null);
-                        setApprovalNotes("");
-                    }}
-                    onSubmit={handleApproval}
-                    notes={approvalNotes}
-                    onNotesChange={setApprovalNotes}
-                    submitting={submitting}
-                />
-            )}
 
             {/* === Create Event Dialog === */}
             <CreateEventDialog
@@ -346,16 +239,6 @@ export default function EventsPage() {
                 allUsers={allUsers}
                 submitting={creatingEvent}
             />
-
-            {/* === Edit Event Dialog === */}
-            {editingEvent && (
-                <EditEventDialog
-                    event={editingEvent}
-                    onClose={() => setEditingEvent(null)}
-                    onSubmit={(data) => handleEditEvent(editingEvent.id, data)}
-                    submitting={editingEventSubmitting}
-                />
-            )}
         </div>
     );
 }
