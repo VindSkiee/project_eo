@@ -30,6 +30,8 @@ import { ProcessApprovalDto } from '../dto/process-approval.dto';
 import { CancelEventDto } from '../dto/cancel-event.dto';
 import { SubmitExpenseReportDto } from '../dto/submit-expense-report.dto';
 import { ExtendEventDateDto } from '../dto/extend-event-date.dto';
+import { RequestAdditionalFundDto } from '../dto/request-additional-fund.dto';
+import { ReviewAdditionalFundDto } from '../dto/review-additional-fund.dto';
 
 
 @Controller('events')
@@ -87,7 +89,7 @@ export class EventsController {
   // 2. ENDPOINT APPROVAL (KHUSUS TREASURER)
   // ==========================================
 
-  @Roles(SystemRoleType.TREASURER)
+  @Roles(SystemRoleType.TREASURER, SystemRoleType.LEADER)
   @Post(':id/approve')
   @HttpCode(HttpStatus.OK)
   async processApproval(
@@ -172,6 +174,36 @@ export class EventsController {
     @ActiveUser() user: ActiveUserData,
   ) {
     return this.eventsService.settleEvent(eventId, user, description, resultFiles || []);
+  }
+
+  // ==========================================
+  // 7. REQUEST ADDITIONAL FUND (Admin, FUNDED → UNDER_REVIEW)
+  //    Admin mengajukan dana tambahan ke RW
+  // ==========================================
+  @Roles(SystemRoleType.ADMIN)
+  @Post(':id/request-additional-fund')
+  @HttpCode(HttpStatus.OK)
+  async requestAdditionalFund(
+    @Param('id') eventId: string,
+    @Body() dto: RequestAdditionalFundDto,
+    @ActiveUser() user: ActiveUserData,
+  ) {
+    return this.eventsService.requestAdditionalFund(eventId, dto, user);
+  }
+
+  // ==========================================
+  // 8. REVIEW ADDITIONAL FUND (RW Treasurer, UNDER_REVIEW → FUNDED)
+  //    Bendahara RW mereview pengajuan dana tambahan
+  // ==========================================
+  @Roles(SystemRoleType.TREASURER)
+  @Post(':id/review-additional-fund')
+  @HttpCode(HttpStatus.OK)
+  async reviewAdditionalFund(
+    @Param('id') eventId: string,
+    @Body() dto: ReviewAdditionalFundDto,
+    @ActiveUser() user: ActiveUserData,
+  ) {
+    return this.eventsService.reviewAdditionalFund(eventId, dto, user);
   }
 
 }

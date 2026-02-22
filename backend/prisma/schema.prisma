@@ -267,7 +267,9 @@ model FundRequest {
   requesterGroupId Int
   targetGroupId    Int
   amount           Decimal           @db.Decimal(15, 2)
+  approvedAmount   Decimal?          @db.Decimal(15, 2)
   description      String
+  notes            String?
   status           FundRequestStatus @default(PENDING)
   createdById      String
   approvedById     String?

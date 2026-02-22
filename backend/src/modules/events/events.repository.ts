@@ -79,7 +79,7 @@ export class EventsRepository {
           select: { title: true, amount: true, proofImage: true },
         },
         approvals: {
-          select: { roleSnapshot: true, status: true, notes: true },
+          select: { roleSnapshot: true, status: true, notes: true, approverId: true },
         },
       },
     });
@@ -119,6 +119,13 @@ export class EventsRepository {
         },
         statusHistory: {
           include: { changedBy: { select: { fullName: true } } },
+          orderBy: { createdAt: 'desc' },
+        },
+        fundRequests: {
+          include: {
+            createdBy: { select: { fullName: true } },
+            approvedBy: { select: { fullName: true } },
+          },
           orderBy: { createdAt: 'desc' },
         },
       },

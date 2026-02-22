@@ -125,4 +125,19 @@ export const eventService = {
   rejectFundRequest: async (id: string, data: { reason: string; rwDecision: string }): Promise<void> => {
     await api.post(`/fund-requests/${id}/reject`, data);
   },
+
+  /** Request additional fund for event (Admin, FUNDED → UNDER_REVIEW) */
+  requestAdditionalFund: async (id: string, data: { amount: number; description: string }): Promise<{ message: string }> => {
+    const response = await api.post<ApiResponse<{ message: string }>>(`/events/${id}/request-additional-fund`, data);
+    return response.data.data;
+  },
+
+  /** Review additional fund request (RW Treasurer, UNDER_REVIEW → FUNDED) */
+  reviewAdditionalFund: async (
+    id: string,
+    data: { approved: boolean; approvedAmount?: number; reason?: string }
+  ): Promise<{ message: string }> => {
+    const response = await api.post<ApiResponse<{ message: string }>>(`/events/${id}/review-additional-fund`, data);
+    return response.data.data;
+  },
 };

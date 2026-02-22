@@ -7,15 +7,20 @@ import {
 } from '@nestjs/common';
 import { EventsRepository } from '../events.repository';
 import { ActiveUserData } from '@common/decorators/active-user.decorator';
-import { EventStatus, SystemRoleType } from '@prisma/client';
+import { EventStatus, SystemRoleType, FundRequestStatus } from '@prisma/client';
 import { CreateEventDto } from '../dto/create-event.dto';
 import { UpdateEventDto } from '../dto/update-event.dto';
 import { EventApprovalService } from './event-approval.service';
 import { SubmitExpenseReportDto } from '../dto/submit-expense-report.dto';
 import { ExtendEventDateDto } from '../dto/extend-event-date.dto';
+import { RequestAdditionalFundDto } from '../dto/request-additional-fund.dto';
+import { ReviewAdditionalFundDto } from '../dto/review-additional-fund.dto';
 import { FinanceService } from '../../finance/services/finance.service'; 
 import { PrismaService } from '../../../database/prisma.service';
 import { StorageService } from '../../../providers/storage/storage.service';
+
+// Threshold: hanya event admin > 1jt yang bisa request dana tambahan
+const ADDITIONAL_FUND_THRESHOLD = 1_000_000;
 
 @Injectable()
 export class EventsService {
@@ -453,6 +458,188 @@ export class EventsService {
       resultImages: resultImageUrls,
       event: settledEvent
     };
+  }
+
+  // ==========================================
+  // 10. REQUEST ADDITIONAL FUND (Admin, FUNDED → UNDER_REVIEW)
+  //     Hanya event yang dibuat Admin dengan budget > 1jt
+  //     Dana tambahan diajukan ke RW (parent group)
+  // ==========================================
+  async requestAdditionalFund(
+    eventId: string,
+    dto: RequestAdditionalFundDto,
+    user: ActiveUserData,
+  ) {
+    const event = await this.eventsRepo.findById(eventId);
+    if (!event) throw new NotFoundException('Acara tidak ditemukan');
+    await this.checkGroupAccess(event.communityGroupId, user);
+
+    if (event.status !== EventStatus.FUNDED) {
+      throw new BadRequestException('Dana tambahan hanya dapat diajukan saat acara berstatus FUNDED');
+    }
+
+    if (user.roleType !== SystemRoleType.ADMIN) {
+      throw new ForbiddenException('Hanya Admin yang dapat mengajukan dana tambahan');
+    }
+
+    if (Number(event.budgetEstimated) <= ADDITIONAL_FUND_THRESHOLD) {
+      throw new BadRequestException(
+        'Dana tambahan hanya tersedia untuk acara dengan anggaran di atas Rp1.000.000',
+      );
+    }
+
+    // Cari parent group (RW) sebagai target pengajuan
+    const rtGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: event.communityGroupId },
+    });
+    if (!rtGroup?.parentId) {
+      throw new BadRequestException('Grup induk (RW) tidak ditemukan untuk pengajuan dana tambahan');
+    }
+
+    // Cek apakah sudah ada fund request PENDING untuk event ini
+    const existingPending = await this.prisma.fundRequest.findFirst({
+      where: { eventId, status: FundRequestStatus.PENDING },
+    });
+    if (existingPending) {
+      throw new BadRequestException('Sudah ada pengajuan dana tambahan yang menunggu review');
+    }
+
+    // Buat FundRequest
+    await this.prisma.fundRequest.create({
+      data: {
+        requesterGroupId: event.communityGroupId,
+        targetGroupId: rtGroup.parentId,
+        amount: dto.amount,
+        description: dto.description,
+        eventId,
+        createdById: user.id,
+        status: FundRequestStatus.PENDING,
+      },
+    });
+
+    // Update status event ke UNDER_REVIEW
+    await this.eventsRepo.updateEventStatus(
+      eventId,
+      EventStatus.UNDER_REVIEW,
+      user.id,
+      `Pengajuan dana tambahan Rp${dto.amount.toLocaleString('id-ID')} ke RW. Alasan: ${dto.description}`,
+    );
+
+    return {
+      message: `Pengajuan dana tambahan Rp${dto.amount.toLocaleString('id-ID')} berhasil dikirim. Menunggu review Bendahara RW.`,
+    };
+  }
+
+  // ==========================================
+  // 11. REVIEW ADDITIONAL FUND (RW Treasurer, UNDER_REVIEW → FUNDED)
+  //     Treasurer RW bisa approve sesuai nominal atau adjust + alasan
+  // ==========================================
+  async reviewAdditionalFund(
+    eventId: string,
+    dto: ReviewAdditionalFundDto,
+    user: ActiveUserData,
+  ) {
+    const event = await this.eventsRepo.findById(eventId);
+    if (!event) throw new NotFoundException('Acara tidak ditemukan');
+
+    if (event.status !== EventStatus.UNDER_REVIEW) {
+      throw new BadRequestException('Acara tidak dalam status menunggu review dana tambahan');
+    }
+
+    if (user.roleType !== SystemRoleType.TREASURER) {
+      throw new ForbiddenException('Hanya Bendahara yang dapat mereview pengajuan dana tambahan');
+    }
+
+    // Cari fund request PENDING untuk event ini
+    const fundRequest = await this.prisma.fundRequest.findFirst({
+      where: { eventId, status: FundRequestStatus.PENDING },
+    });
+    if (!fundRequest) {
+      throw new NotFoundException('Pengajuan dana tambahan tidak ditemukan');
+    }
+
+    // Pastikan user berada di target group (RW)
+    if (user.communityGroupId !== fundRequest.targetGroupId) {
+      throw new ForbiddenException('Anda tidak memiliki hak untuk mereview pengajuan ini');
+    }
+
+    const requestedAmount = Number(fundRequest.amount);
+    const transferAmount = dto.approvedAmount ?? requestedAmount;
+
+    if (dto.approved) {
+      // Transfer dari kas RW ke kas RT
+      await this.financeService.transferInterGroup(
+        fundRequest.targetGroupId,    // RW (pengirim)
+        fundRequest.requesterGroupId, // RT (penerima)
+        transferAmount,
+        `Dana tambahan acara "${event.title}": ${fundRequest.description}`,
+      );
+
+      // Update FundRequest
+      await this.prisma.fundRequest.update({
+        where: { id: fundRequest.id },
+        data: {
+          status: FundRequestStatus.APPROVED,
+          approvedById: user.id,
+          approvedAmount: transferAmount,
+          notes: dto.reason || null,
+        },
+      });
+
+      // Update budget event (tambah dana tambahan)
+      const newBudget = Number(event.budgetEstimated) + transferAmount;
+      await this.prisma.event.update({
+        where: { id: eventId },
+        data: { budgetEstimated: newBudget },
+      });
+
+      // Kembali ke FUNDED
+      const adjustNote =
+        dto.approvedAmount && dto.approvedAmount !== requestedAmount
+          ? ` (disesuaikan dari Rp${requestedAmount.toLocaleString('id-ID')})`
+          : '';
+      const reasonNote = dto.reason ? `. Alasan: ${dto.reason}` : '';
+
+      await this.eventsRepo.updateEventStatus(
+        eventId,
+        EventStatus.FUNDED,
+        user.id,
+        `Dana tambahan Rp${transferAmount.toLocaleString('id-ID')}${adjustNote} disetujui dan dicairkan dari kas RW${reasonNote}`,
+      );
+
+      this.logger.log(
+        `Additional fund Rp${transferAmount} approved for event ${eventId}.`,
+      );
+
+      return {
+        message: `Dana tambahan Rp${transferAmount.toLocaleString('id-ID')} berhasil disetujui dan dicairkan.`,
+      };
+    } else {
+      // Tolak → kembali ke FUNDED tanpa dana tambahan
+      if (!dto.reason) {
+        throw new BadRequestException('Alasan penolakan wajib diisi');
+      }
+
+      await this.prisma.fundRequest.update({
+        where: { id: fundRequest.id },
+        data: {
+          status: FundRequestStatus.REJECTED,
+          approvedById: user.id,
+          notes: dto.reason,
+        },
+      });
+
+      await this.eventsRepo.updateEventStatus(
+        eventId,
+        EventStatus.FUNDED,
+        user.id,
+        `Pengajuan dana tambahan Rp${requestedAmount.toLocaleString('id-ID')} ditolak. Alasan: ${dto.reason}`,
+      );
+
+      return {
+        message: 'Pengajuan dana tambahan ditolak. Acara kembali ke status FUNDED.',
+      };
+    }
   }
 
   // ==========================================

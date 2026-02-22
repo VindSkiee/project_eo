@@ -29,21 +29,24 @@ export function StatsCards({ usersCount, rtCount, wallet, activeEventsCount, loa
   const items = [
     {
       title: "Total Warga",
-      icon: <Users className="h-4 w-4 text-primary" />,
+      icon: <Users className="h-4 w-4" />,
+      iconBg: "bg-primary/10 text-primary",
       value: usersCount,
       description: "Terdaftar dalam sistem",
       skeletonWidth: "w-16",
     },
     {
       title: "Total RT",
-      icon: <Building2 className="h-4 w-4 text-primary" />,
+      icon: <Building2 className="h-4 w-4" />,
+      iconBg: "bg-blue-100 text-blue-600",
       value: rtCount,
       description: "RT aktif",
       skeletonWidth: "w-12",
     },
     {
       title: "Kas RW",
-      icon: <Wallet className="h-4 w-4 text-brand-green" />,
+      icon: <Wallet className="h-4 w-4" />,
+      iconBg: "bg-emerald-100 text-emerald-600",
       value: wallet ? formatRupiah(wallet.balance) : "Rp 0",
       description: wallet?.communityGroup?.name || "Saldo kas",
       descriptionClass: "text-brand-green font-medium",
@@ -51,7 +54,8 @@ export function StatsCards({ usersCount, rtCount, wallet, activeEventsCount, loa
     },
     {
       title: "Kegiatan Aktif",
-      icon: <CalendarDays className="h-4 w-4 text-primary" />,
+      icon: <CalendarDays className="h-4 w-4" />,
+      iconBg: "bg-amber-100 text-amber-600",
       value: activeEventsCount,
       description: "Sedang berjalan",
       skeletonWidth: "w-12",
@@ -59,14 +63,16 @@ export function StatsCards({ usersCount, rtCount, wallet, activeEventsCount, loa
   ];
 
   return (
-    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
       {items.map((item) => (
-        <Card key={item.title}>
+        <Card key={item.title} className="hover:shadow-sm transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">
               {item.title}
             </CardTitle>
-            {item.icon}
+            <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${item.iconBg}`}>
+              {item.icon}
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (

@@ -6,21 +6,21 @@ import {
   CardTitle,
 } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
-import { Badge } from "@/shared/ui/badge";
 import {
   Users,
   CalendarDays,
   Wallet,
   Banknote,
   ArrowRight,
+  FileText,
 } from "lucide-react";
-import { Button } from "@/shared/ui/button";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
 import { eventService } from "@/features/event/services/eventService";
 import { userService } from "@/shared/services/userService";
 import { fundRequestService } from "@/features/finance/services/fundRequestService";
+import { RecentEventsCard } from "@/features/dashboard/components";
 import type {
   WalletDetail,
   EventItem,
@@ -83,13 +83,12 @@ export default function AdminDashboard() {
     (e) => e.status === "APPROVED" || e.status === "IN_PROGRESS"
   );
   const pendingFR = fundRequests.filter((f) => f.status === "PENDING");
-  const recentEvents = events.slice(0, 5);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold font-poppins text-slate-900">
+        <h1 className="text-2xl sm:text-3xl font-bold font-poppins text-slate-900 tracking-tight">
           Dashboard{" "}
           <span className="text-brand-green">
             {wallet?.communityGroup?.name || "RT"}
@@ -101,187 +100,117 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">
-              Warga
-            </CardTitle>
-            <Users className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-12" />
-            ) : (
-              <div className="text-2xl font-bold text-slate-900">
-                {users.length}
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
+        {[
+          {
+            title: "Warga",
+            icon: <Users className="h-4 w-4" />,
+            iconBg: "bg-primary/10 text-primary",
+            value: String(users.length),
+            sub: "Terdaftar dalam sistem",
+          },
+          {
+            title: "Saldo Kas",
+            icon: <Wallet className="h-4 w-4" />,
+            iconBg: "bg-emerald-100 text-emerald-600",
+            value: wallet ? formatRupiah(wallet.balance) : "Rp 0",
+            valueColor: "text-slate-900",
+          },
+          {
+            title: "Kegiatan Aktif",
+            icon: <CalendarDays className="h-4 w-4" />,
+            iconBg: "bg-blue-100 text-blue-600",
+            value: String(activeEvents.length),
+            sub: "Sedang berjalan",
+          },
+          {
+            title: "Pengajuan Dana",
+            icon: <FileText className="h-4 w-4" />,
+            iconBg: "bg-amber-100 text-amber-600",
+            value: String(pendingFR.length),
+            valueColor: pendingFR.length > 0 ? "text-amber-600" : "text-slate-900",
+            sub: pendingFR.length > 0 ? "Menunggu persetujuan" : undefined,
+            subColor: "text-amber-600 font-medium",
+          },
+        ].map((card) => (
+          <Card key={card.title} className="hover:shadow-sm transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">
+                {card.title}
+              </CardTitle>
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${card.iconBg}`}>
+                {card.icon}
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">
-              Saldo Kas
-            </CardTitle>
-            <Wallet className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <div className="text-xl sm:text-2xl font-bold text-slate-900">
-                {wallet ? formatRupiah(wallet.balance) : "Rp 0"}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">
-              Kegiatan Aktif
-            </CardTitle>
-            <CalendarDays className="h-4 w-4 text-brand-green" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-12" />
-            ) : (
-              <div className="text-2xl font-bold text-slate-900">
-                {activeEvents.length}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">
-              Pengajuan Dana
-            </CardTitle>
-            <Banknote className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-12" />
-            ) : (
-              <div className="text-2xl font-bold text-amber-600">
-                {pendingFR.length}
-              </div>
-            )}
-            {!loading && pendingFR.length > 0 && (
-              <p className="text-xs text-amber-600 mt-1">Menunggu persetujuan</p>
-            )}
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <Skeleton className="h-8 w-20" />
+              ) : (
+                <>
+                  <div className={`text-xl sm:text-2xl font-bold ${card.valueColor ?? "text-slate-900"}`}>
+                    {card.value}
+                  </div>
+                  {card.sub && (
+                    <p className={`text-xs mt-1 ${card.subColor ?? "text-slate-500"}`}>
+                      {card.sub}
+                    </p>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Recent Events */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base font-poppins">
-            Kegiatan Terbaru
-          </CardTitle>
-          <Link to="/dashboard/kegiatan-rt">
-            <Button variant="ghost" size="sm" className="text-primary gap-1">
-              Lihat Semua <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : recentEvents.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-6">
-              Belum ada kegiatan.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {recentEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="flex items-center justify-between rounded-lg border p-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-900 truncate">
-                      {event.title}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {event.startDate ? new Date(event.startDate).toLocaleDateString("id-ID", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      }) : "Tanggal tidak tersedia"}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      event.status === "APPROVED"
-                        ? "default"
-                        : event.status === "REJECTED" ||
-                            event.status === "CANCELLED"
-                          ? "destructive"
-                          : "secondary"
-                    }
-                    className="text-xs shrink-0 ml-2"
-                  >
-                    {event.status}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <RecentEventsCard
+        events={events}
+        loading={loading}
+        viewAllLink="/dashboard/kegiatan-rt"
+      />
 
       {/* Quick Links */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Link to="/dashboard/organisasi-rt">
-          <Card className="hover:border-primary/30 hover:shadow-md transition-all cursor-pointer">
-            <CardContent className="flex items-center gap-3 py-4">
-              <Users className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium text-slate-700">
-                Data Warga
-              </span>
-            </CardContent>
-          </Card>
-        </Link>
-        <Link to="/dashboard/kegiatan-rt">
-          <Card className="hover:border-primary/30 hover:shadow-md transition-all cursor-pointer">
-            <CardContent className="flex items-center gap-3 py-4">
-              <CalendarDays className="h-5 w-5 text-brand-green" />
-              <span className="text-sm font-medium text-slate-700">
-                Kegiatan
-              </span>
-            </CardContent>
-          </Card>
-        </Link>
-        <Link to="/dashboard/kas-rt">
-          <Card className="hover:border-primary/30 hover:shadow-md transition-all cursor-pointer">
-            <CardContent className="flex items-center gap-3 py-4">
-              <Wallet className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium text-slate-700">
-                Kas & Keuangan
-              </span>
-            </CardContent>
-          </Card>
-        </Link>
-        <Link to="/dashboard/pengaturan-iuran">
-          <Card className="hover:border-primary/30 hover:shadow-md transition-all cursor-pointer">
-            <CardContent className="flex items-center gap-3 py-4">
-              <Banknote className="h-5 w-5 text-amber-500" />
-              <span className="text-sm font-medium text-slate-700">
-                Pengaturan Iuran
-              </span>
-            </CardContent>
-          </Card>
-        </Link>
+        {[
+          {
+            to: "/dashboard/organisasi-rt",
+            icon: <Users className="h-5 w-5" />,
+            iconBg: "bg-primary/10 text-primary",
+            label: "Data Warga",
+          },
+          {
+            to: "/dashboard/kegiatan-rt",
+            icon: <CalendarDays className="h-5 w-5" />,
+            iconBg: "bg-emerald-100 text-emerald-600",
+            label: "Kegiatan",
+          },
+          {
+            to: "/dashboard/kas-rt",
+            icon: <Wallet className="h-5 w-5" />,
+            iconBg: "bg-blue-100 text-blue-600",
+            label: "Kas & Keuangan",
+          },
+          {
+            to: "/dashboard/pengaturan-iuran",
+            icon: <Banknote className="h-5 w-5" />,
+            iconBg: "bg-amber-100 text-amber-600",
+            label: "Pengaturan Iuran",
+          },
+        ].map((link) => (
+          <Link key={link.to} to={link.to}>
+            <Card className="group hover:border-primary/30 hover:shadow-md transition-all cursor-pointer">
+              <CardContent className="flex items-center gap-3 py-4">
+                <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${link.iconBg}`}>
+                  {link.icon}
+                </div>
+                <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900 transition-colors">
+                  {link.label}
+                </span>
+                <ArrowRight className="h-4 w-4 text-slate-400 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
       </div>
     </div>
   );

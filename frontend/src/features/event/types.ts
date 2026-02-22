@@ -54,6 +54,7 @@ export interface EventApproval {
   status: string; // PENDING, APPROVED, REJECTED
   notes: string | null;
   approvedAt: string | null;
+  approverId?: string;
   approver?: {
     fullName: string;
   };
@@ -101,6 +102,7 @@ export interface EventItem {
   expenses?: EventExpense[];
   approvals?: EventApproval[];
   statusHistory?: EventStatusHistory[];
+  fundRequests?: FundRequestItem[];
   receiptImages?: string[];
   resultImages?: string[];
   resultDescription?: string | null;
@@ -109,7 +111,9 @@ export interface EventItem {
 export interface FundRequestItem {
   id: string;
   amount: number | string;
+  approvedAmount?: number | string | null;
   description: string;
+  notes?: string | null;
   status: string;
   eventId?: string | null;
   requesterGroupId: number;

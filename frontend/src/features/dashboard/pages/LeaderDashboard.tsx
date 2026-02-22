@@ -15,7 +15,7 @@ import type {
 import {
   StatsCards,
   ActionRequired,
-  RecentEvents,
+  RecentEventsCard,
   RecentFundRequests,
   QuickLinks,
 } from "@/features/dashboard/components";
@@ -72,10 +72,10 @@ export default function LeaderDashboard() {
   const rtGroups = groups.filter((g) => g.type === "RT");
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold font-poppins text-slate-900">
+        <h1 className="text-2xl sm:text-3xl font-bold font-poppins text-slate-900 tracking-tight">
           Dashboard <span className="text-brand-green">{wallet?.communityGroup?.name || "—"}</span>
         </h1>
         <p className="text-sm sm:text-base text-slate-500 mt-1">
@@ -97,8 +97,8 @@ export default function LeaderDashboard() {
         loading={loading}
       />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <RecentEvents events={events} loading={loading} />
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
+        <RecentEventsCard events={events} loading={loading} viewAllLink="/dashboard/kegiatan" />
         <RecentFundRequests fundRequests={fundRequests} loading={loading} />
       </div>
 

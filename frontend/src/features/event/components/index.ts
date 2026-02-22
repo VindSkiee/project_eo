@@ -16,3 +16,7 @@ export { CancelEventDialog } from './CancelEventDialog';
 export { ExpenseReportDialog } from './ExpenseReportDialog';
 export { SettleEventDialog } from './SettleEventDialog';
 export { ExtendDateDialog } from './ExtendDateDialog';
+
+// Additional fund dialogs
+export { AdditionalFundRequestDialog } from './AdditionalFundRequestDialog';
+export { ReviewAdditionalFundDialog } from './ReviewAdditionalFundDialog';

@@ -26,13 +26,16 @@ import {
   PartyPopper,
   Image as ImageIcon,
   Maximize2,
+  Banknote,
+  ClipboardCheck,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { eventService } from "@/features/event/services/eventService";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { getAvatarUrl } from "@/shared/helpers/avatarUrl";
 import type { EventItem } from "@/shared/types";
-import type { EventStatusType } from "@/features/event/types";
+import type { EventStatusType, FundRequestItem } from "@/features/event/types";
 import {
   EventHeader,
   CommitteeList,
@@ -44,6 +47,8 @@ import {
   CancelEventDialog,
   SettleEventDialog,
   ExtendDateDialog,
+  AdditionalFundRequestDialog,
+  ReviewAdditionalFundDialog,
 } from "@/features/event/components";
 import { ExpenseReportDialog } from "@/features/event/components/ExpenseReportDialog";
 
@@ -52,12 +57,12 @@ import { ExpenseReportDialog } from "@/features/event/components/ExpenseReportDi
 // ---------------------------------------------------------------------------
 type UserRole = "LEADER" | "ADMIN" | "TREASURER" | "RESIDENT";
 
-function getCurrentUser(): { id: string; role: UserRole } | null {
+function getCurrentUser(): { id: string; role: UserRole; communityGroupId?: number } | null {
   try {
     const raw = localStorage.getItem("user");
     if (!raw) return null;
     const u = JSON.parse(raw);
-    return { id: u.id, role: u.role };
+    return { id: u.id, role: u.role, communityGroupId: u.communityGroupId };
   } catch {
     return null;
   }
@@ -84,6 +89,8 @@ export default function EventDetailPage() {
   const [previewResultImage, setPreviewResultImage] = useState<string | null>(null);
   const [showExtendDialog, setShowExtendDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showAdditionalFundDialog, setShowAdditionalFundDialog] = useState(false);
+  const [showReviewFundDialog, setShowReviewFundDialog] = useState(false);
 
   const user = useMemo(() => getCurrentUser(), []);
   const role = user?.role ?? "RESIDENT";
@@ -224,26 +231,79 @@ export default function EventDetailPage() {
     }
   };
 
+  const handleRequestAdditionalFund = async (amount: number, description: string) => {
+    try {
+      await eventService.requestAdditionalFund(id!, { amount, description });
+      toast.success("Pengajuan dana tambahan berhasil dikirim!");
+      setShowAdditionalFundDialog(false);
+      fetchEvent();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg || "Gagal mengajukan dana tambahan.");
+    }
+  };
+
+  const handleReviewAdditionalFund = async (data: {
+    approved: boolean;
+    approvedAmount?: number;
+    reason?: string;
+  }) => {
+    try {
+      await eventService.reviewAdditionalFund(id!, data);
+      toast.success(
+        data.approved
+          ? "Dana tambahan berhasil dicairkan!"
+          : "Pengajuan dana tambahan ditolak."
+      );
+      setShowReviewFundDialog(false);
+      fetchEvent();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg || "Gagal memproses review dana tambahan.");
+    }
+  };
+
   // -----------------------------------------------------------------------
   // Permission matrix: which actions are available
   // -----------------------------------------------------------------------
   const canEdit = ["DRAFT", "REJECTED"].includes(status) && (isCreator || ["LEADER", "ADMIN"].includes(role));
   const canDelete = status === "DRAFT" && (isCreator || ["LEADER", "ADMIN"].includes(role));
   const canSubmit = ["DRAFT", "REJECTED"].includes(status) && (isCreator || ["LEADER", "ADMIN"].includes(role));
-  // Only TREASURER can approve/reject SUBMITTED events
-  const canApprove = status === "SUBMITTED" && role === "TREASURER";
+  // Only the assigned TREASURER/LEADER can approve/reject SUBMITTED events
+  const isAssignedApprover = !!(
+    event?.approvals?.some(
+      (a) => a.approverId === user?.id && a.status === "PENDING"
+    )
+  );
+  const canApprove = status === "SUBMITTED" && ["TREASURER", "LEADER"].includes(role) && isAssignedApprover;
   const canCancel =
     ["DRAFT", "SUBMITTED", "FUNDED", "ONGOING"].includes(status) &&
     (isCreator || ["LEADER", "ADMIN"].includes(role));
   const canExtendDate = status === "ONGOING" && (isCreator || ["LEADER", "ADMIN"].includes(role));
-  // Treasurer submits expense report at FUNDED → ONGOING
-  const canSubmitExpenseReport = status === "FUNDED" && role === "TREASURER";
+  // Treasurer submits expense report at FUNDED → ONGOING (same group only)
+  const isSameGroup = event?.communityGroupId === user?.communityGroupId;
+  const canSubmitExpenseReport = status === "FUNDED" && role === "TREASURER" && isSameGroup;
   // Leader/Admin settles at COMPLETED → SETTLED
   const canSettle = status === "COMPLETED" && ["LEADER", "ADMIN"].includes(role);
 
+  // Additional fund request: Admin, FUNDED, budget > 1M
+  const isHighBudget = Number(event?.budgetEstimated ?? 0) >= 1_000_000;
+  const canRequestAdditionalFund =
+    status === "FUNDED" && role === "ADMIN" && isHighBudget;
+
+  // Review additional fund: RW Treasurer, UNDER_REVIEW, has pending fund request targeting user's group
+  const pendingFundRequest: FundRequestItem | null =
+    event?.fundRequests?.find((fr) => fr.status === "PENDING") ?? null;
+  const canReviewAdditionalFund =
+    status === "UNDER_REVIEW" &&
+    role === "TREASURER" &&
+    !!pendingFundRequest &&
+    pendingFundRequest.targetGroupId === user?.communityGroupId;
+
   const hasAnyAction =
     canEdit || canDelete || canSubmit || canApprove || canCancel ||
-    canExtendDate || canSubmitExpenseReport || canSettle;
+    canExtendDate || canSubmitExpenseReport || canSettle ||
+    canRequestAdditionalFund || canReviewAdditionalFund;
 
   // -----------------------------------------------------------------------
   // Render
@@ -366,6 +426,20 @@ export default function EventDetailPage() {
                 </Button>
               )}
 
+              {/* Request Additional Fund (Admin, FUNDED, > 1M) */}
+              {canRequestAdditionalFund && (
+                <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => setShowAdditionalFundDialog(true)}>
+                  <Banknote className="h-4 w-4 mr-1" /> Ajukan Dana Tambahan
+                </Button>
+              )}
+
+              {/* Review Additional Fund (RW Treasurer, UNDER_REVIEW) */}
+              {canReviewAdditionalFund && (
+                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setShowReviewFundDialog(true)}>
+                  <ClipboardCheck className="h-4 w-4 mr-1" /> Review Dana Tambahan
+                </Button>
+              )}
+
               {/* Extend Date (Leader/Admin, ONGOING) */}
               {canExtendDate && (
                 <Button size="sm" variant="outline" onClick={() => setShowExtendDialog(true)}>
@@ -390,6 +464,50 @@ export default function EventDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* === UNDER_REVIEW: Pending Additional Fund Info === */}
+      {status === "UNDER_REVIEW" && pendingFundRequest && (() => {
+        const formatRp = (n: number) =>
+          new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
+        return (
+          <Card className="relative overflow-hidden border-0 ring-1 ring-amber-200 bg-white shadow-sm rounded-2xl">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-orange-400" />
+            <CardHeader className="pb-3 pt-5">
+              <CardTitle className="text-base flex items-center gap-2 text-amber-800">
+                <div className="p-1.5 rounded-md bg-amber-100">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                </div>
+                Pengajuan Dana Tambahan — Menunggu Review
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 pb-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                  <p className="text-xs text-amber-600 font-medium mb-1">Nominal Diajukan</p>
+                  <p className="text-base font-bold text-amber-800">
+                    {formatRp(Number(pendingFundRequest.amount))}
+                  </p>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                  <p className="text-xs text-slate-500 font-medium mb-1">Budget Saat Ini</p>
+                  <p className="text-base font-bold text-slate-900">
+                    {formatRp(Number(event.budgetEstimated))}
+                  </p>
+                </div>
+              </div>
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                <p className="text-xs text-slate-500 font-medium mb-1">Alasan Pengajuan</p>
+                <p className="text-sm text-slate-700">{pendingFundRequest.description}</p>
+              </div>
+              {pendingFundRequest.createdBy && (
+                <p className="text-xs text-slate-400">
+                  Diajukan oleh: {pendingFundRequest.createdBy.fullName}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* === LAPORAN AKHIR KEGIATAN (SETTLED) === */}
       {status === "SETTLED" && (() => {
@@ -559,6 +677,22 @@ export default function EventDetailPage() {
         description={`Yakin ingin menghapus kegiatan "${event?.title}"? Aksi ini tidak dapat dibatalkan.`}
         confirmLabel="Ya, Hapus"
         onConfirm={handleDelete}
+      />
+
+      {/* Additional Fund Request Dialog (Admin) */}
+      <AdditionalFundRequestDialog
+        open={showAdditionalFundDialog}
+        onClose={() => setShowAdditionalFundDialog(false)}
+        onSubmit={handleRequestAdditionalFund}
+        currentBudget={Number(event.budgetEstimated)}
+      />
+
+      {/* Review Additional Fund Dialog (RW Treasurer) */}
+      <ReviewAdditionalFundDialog
+        open={showReviewFundDialog}
+        onClose={() => setShowReviewFundDialog(false)}
+        onSubmit={handleReviewAdditionalFund}
+        fundRequest={pendingFundRequest}
       />
     </div>
   );
