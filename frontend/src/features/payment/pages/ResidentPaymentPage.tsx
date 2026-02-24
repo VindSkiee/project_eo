@@ -197,28 +197,46 @@ export default function ResidentPaymentPage() {
 
   // Reset month selection whenever bill data changes
   useEffect(() => {
-    setSelectedMonthCount(1);
-  }, [bill?.nextBillMonth, bill?.nextBillYear]);
+    // Default seleksi: minimal pilih 1 bulan, atau lunasi semua tunggakan jika ada.
+    const defaultSelect = bill && bill.unpaidMonthsCount > 0 ? bill.unpaidMonthsCount : 1;
+    setSelectedMonthCount(defaultSelect);
+  }, [bill?.nextBillMonth, bill?.nextBillYear, bill?.unpaidMonthsCount]);
 
-  // Daftar bulan Jan–Des tahun tagihan — capped ke Desember (tidak melewati tahun ini)
+  // Daftar bulan Jan–Des tahun tagihan — capped ke Desember
   const monthGrid = useMemo(() => {
     const startMonth = bill?.nextBillMonth ?? (new Date().getMonth() + 1);
     const year = bill?.nextBillYear ?? new Date().getFullYear();
-    // Jumlah bulan yang bisa dipilih maksimal sampai Desember
-    const maxSelectable = 12 - startMonth + 1; // 1 = hanya bulan ini, dst.
+    const unpaidCount = bill?.unpaidMonthsCount || 0;
+
+    const maxSelectable = 12 - startMonth + 1;
+
     return {
       months: Array.from({ length: 12 }, (_, i) => {
         const m = i + 1; // 1-12
-        const offset = m - startMonth; // <0=paid, 0=locked, >0=selectable
-        const state = offset < 0 ? "paid" : offset === 0 ? "locked" : "selectable";
+        const offset = m - startMonth; // <0=paid, 0=current nextBillMonth
+
+        // Logika Status:
+        // Jika offset negatif (bulan sebelumnya), berarti sudah LUNAS (paid)
+        // Jika offset positif tapi MASIH DI DALAM rentang nunggak, berarti WAJIB (locked)
+        // Jika di luar rentang nunggak, berarti BISA DIPILIH (selectable)
+        let state = "selectable";
+        if (offset < 0) {
+          state = "paid";
+        } else if (offset < unpaidCount) {
+          // Semua bulan nunggak statusnya terkunci (harus dibayar)
+          state = "locked";
+        }
+
+        // isChecked = bukan paid, dan posisinya di bawah selectedMonthCount
         const isChecked = state !== "paid" && offset < selectedMonthCount;
+
         return { month: m, year, label: MONTH_NAMES_ID[i], short: MONTH_SHORT_ID[i], state, offset, isChecked };
       }),
       maxSelectable,
       startMonth,
       year,
     };
-  }, [bill?.nextBillMonth, bill?.nextBillYear, selectedMonthCount]);
+  }, [bill?.nextBillMonth, bill?.nextBillYear, bill?.unpaidMonthsCount, selectedMonthCount]);
 
   // Toggle bulan — hanya dalam tahun berjalan (maks Desember)
   const handleMonthToggle = (m: number) => {
@@ -489,7 +507,8 @@ export default function ResidentPaymentPage() {
                   </div>
                   <p className="text-xl sm:text-2xl font-bold text-black font-poppins">
                     <AnimatedNumber
-                      value={bill!.totalAmount * selectedMonthCount}
+                      // 👇 GUNAKAN baseMonthlyAmount DI SINI 👇
+                      value={(bill?.baseMonthlyAmount || 0) * selectedMonthCount}
                       formatter={formatRupiah}
                     />
                   </p>
@@ -561,7 +580,9 @@ export default function ResidentPaymentPage() {
               ) : (
                 <>
                   <CreditCard className="h-5 w-5 mr-2" />
-                  Bayar {selectedMonthCount > 1 ? `${selectedMonthCount} Bulan` : "Sekarang"} &mdash; {formatRupiah((bill?.totalAmount || 0) * selectedMonthCount)}
+                  Bayar {selectedMonthCount > 1 ? `${selectedMonthCount} Bulan` : "Sekarang"} &mdash;
+                  {/* 👇 GUNAKAN baseMonthlyAmount DI SINI 👇 */}
+                  {formatRupiah((bill?.baseMonthlyAmount || 0) * selectedMonthCount)}
                 </>
               )}
             </Button>
@@ -575,7 +596,7 @@ export default function ResidentPaymentPage() {
                 <CheckCircle2 className="h-6 w-6 text-emerald-600" />
               </div>
               <div>
-                <p className="text-base font-semibold text-emerald-800 font-poppins">Semua Iuran Lunas!</p>
+                <p className="text-base font-semibold text-emerald-800 font-poppins">Semua Iuran Lunas Untuk Tahun Ini!</p>
                 <p className="text-sm text-emerald-600 mt-0.5">
                   Tidak ada tagihan yang perlu dibayar saat ini.
                 </p>
@@ -717,8 +738,8 @@ export default function ResidentPaymentPage() {
                     <div className="flex items-stretch">
                       {/* Status Color Accent Line */}
                       <div className={`w-1.5 shrink-0 ${payment.status === 'PAID' ? 'bg-emerald-500' :
-                          payment.status === 'PENDING' ? 'bg-amber-400' :
-                            payment.status === 'FAILED' ? 'bg-red-500' : 'bg-slate-300'
+                        payment.status === 'PENDING' ? 'bg-amber-400' :
+                          payment.status === 'FAILED' ? 'bg-red-500' : 'bg-slate-300'
                         }`}></div>
 
                       <div className="flex-1 flex items-center gap-4 py-4 px-5">
@@ -807,7 +828,10 @@ export default function ResidentPaymentPage() {
 
               <span className="flex items-center justify-between text-base font-bold border-t pt-2">
                 <span className="text-slate-800">Total</span>
-                <span className="text-primary">{formatRupiah((bill?.totalAmount || 0) * (hasPendingPayment ? 1 : selectedMonthCount))}</span>
+                {/* 👇 GUNAKAN baseMonthlyAmount DI SINI 👇 */}
+                <span className="text-primary">
+                  {formatRupiah((bill?.baseMonthlyAmount || 0) * (hasPendingPayment ? 1 : selectedMonthCount))}
+                </span>
               </span>
 
               <span className="block mt-3 p-2 bg-slate-50 rounded-lg border">

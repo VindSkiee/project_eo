@@ -266,30 +266,34 @@ export default function EventDetailPage() {
   // -----------------------------------------------------------------------
   // Permission matrix: which actions are available
   // -----------------------------------------------------------------------
-  const canEdit = ["DRAFT", "REJECTED"].includes(status) && (isCreator || ["LEADER", "ADMIN"].includes(role));
-  const canDelete = status === "DRAFT" && (isCreator || ["LEADER", "ADMIN"].includes(role));
-  const canSubmit = ["DRAFT", "REJECTED"].includes(status) && (isCreator || ["LEADER", "ADMIN"].includes(role));
-  // Only the assigned TREASURER/LEADER can approve/reject SUBMITTED events
+
+  // Aksi yang HANYA boleh dilakukan oleh PEMBUAT ACARA (Creator)
+  const canEdit = ["DRAFT", "REJECTED"].includes(status) && isCreator;
+  const canDelete = status === "DRAFT" && isCreator;
+  const canSubmit = ["DRAFT", "REJECTED"].includes(status) && isCreator;
+  const canCancel = ["DRAFT", "SUBMITTED", "FUNDED", "ONGOING"].includes(status) && isCreator;
+  const canExtendDate = status === "ONGOING" && isCreator;
+  const canSettle = status === "COMPLETED" && isCreator;
+
+  // Additional fund request: Hanya Admin pembuat acara, jika FUNDED, dan budget > 1M
+  const isHighBudget = Number(event?.budgetEstimated ?? 0) >= 1_000_000;
+  const canRequestAdditionalFund = status === "FUNDED" && role === "ADMIN" && isCreator && isHighBudget;
+
+  // -----------------------------------------------------------------------
+  // Aksi Khusus APPROVER & TREASURER (Bukan berdasarkan Creator)
+  // -----------------------------------------------------------------------
+
+  // Only the assigned TREASURER/LEADER can approve/reject SUBMITTED/UNDER_REVIEW events
   const isAssignedApprover = !!(
     event?.approvals?.some(
       (a) => a.approverId === user?.id && a.status === "PENDING"
     )
   );
-  const canApprove = status === "SUBMITTED" && ["TREASURER", "LEADER"].includes(role) && isAssignedApprover;
-  const canCancel =
-    ["DRAFT", "SUBMITTED", "FUNDED", "ONGOING"].includes(status) &&
-    (isCreator || ["LEADER", "ADMIN"].includes(role));
-  const canExtendDate = status === "ONGOING" && (isCreator || ["LEADER", "ADMIN"].includes(role));
+  const canApprove = ["SUBMITTED", "UNDER_REVIEW"].includes(status) && ["TREASURER", "LEADER"].includes(role) && isAssignedApprover;
+
   // Treasurer submits expense report at FUNDED → ONGOING (same group only)
   const isSameGroup = event?.communityGroupId === user?.communityGroupId;
   const canSubmitExpenseReport = status === "FUNDED" && role === "TREASURER" && isSameGroup;
-  // Leader/Admin settles at COMPLETED → SETTLED
-  const canSettle = status === "COMPLETED" && ["LEADER", "ADMIN"].includes(role);
-
-  // Additional fund request: Admin, FUNDED, budget > 1M
-  const isHighBudget = Number(event?.budgetEstimated ?? 0) >= 1_000_000;
-  const canRequestAdditionalFund =
-    status === "FUNDED" && role === "ADMIN" && isHighBudget;
 
   // Review additional fund: RW Treasurer, UNDER_REVIEW, has pending fund request targeting user's group
   const pendingFundRequest: FundRequestItem | null =
@@ -300,6 +304,7 @@ export default function EventDetailPage() {
     !!pendingFundRequest &&
     pendingFundRequest.targetGroupId === user?.communityGroupId;
 
+  // Cek apakah ada aksi apapun yang bisa dilakukan user ini untuk me-render Card "Aksi"
   const hasAnyAction =
     canEdit || canDelete || canSubmit || canApprove || canCancel ||
     canExtendDate || canSubmitExpenseReport || canSettle ||
@@ -354,7 +359,7 @@ export default function EventDetailPage() {
       </Button>
 
       {/* Event Header */}
-      <EventHeader event={event} />
+      <EventHeader event={event} currentUserId={user?.id} />
 
       {/* Description */}
       <Card>
@@ -372,11 +377,11 @@ export default function EventDetailPage() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CommitteeList event={event} />
+        <CommitteeList event={event} currentUserId={user?.id} />
         <ExpensesSummary
           event={event}
           canVerify={false}
-          onVerify={async () => {}}
+          onVerify={async () => { }}
         />
       </div>
 
@@ -606,8 +611,18 @@ export default function EventDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
-      <ApprovalWorkflow event={event} />
-      <StatusHistory event={event} />
+      {/* === Preview Dialog Result Photo === */}
+      {/* ... kode preview photo ... */}
+
+      {/* Sembunyikan alur persetujuan & riwayat status dari warga biasa */}
+      {role !== "RESIDENT" && (
+        <>
+          <ApprovalWorkflow event={event} />
+          <StatusHistory event={event} />
+        </>
+      )}
+
+      {/* ====================== Dialogs ====================== */}
 
       {/* ====================== Dialogs ====================== */}
 

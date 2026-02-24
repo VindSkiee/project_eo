@@ -18,6 +18,27 @@ export interface UserItem {
   };
   createdAt: string;
   updatedAt: string;
+  
+  // --- FITUR KEUANGAN / IURAN ---
+  
+  lastPaidPeriod?: string | null; 
+  
+  contributions?: Array<{
+    id?: string;
+    month: number;
+    year: number;
+    amount?: number | string;
+    paidAt: string;
+  }>;
+
+  // 👇 TAMBAHKAN INI UNTUK MENGHILANGKAN ERROR 👇
+  paymentGatewayTxs?: Array<{
+    id: string;
+    orderId?: string;
+    amount: number | string;
+    status: string;
+    createdAt: string;
+  }>;
 }
 
 export interface User {

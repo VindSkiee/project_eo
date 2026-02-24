@@ -71,6 +71,7 @@ export class EventsRepository {
       orderBy: { createdAt: 'desc' },
       include: {
         createdBy: { select: { fullName: true, role: { select: { name: true } } } },
+        communityGroup: { select: { name: true, type: true, parentId: true } },
         participants: {
           include: { user: { select: { fullName: true } } },
         },

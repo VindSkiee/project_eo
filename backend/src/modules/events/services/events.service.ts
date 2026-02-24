@@ -15,7 +15,7 @@ import { SubmitExpenseReportDto } from '../dto/submit-expense-report.dto';
 import { ExtendEventDateDto } from '../dto/extend-event-date.dto';
 import { RequestAdditionalFundDto } from '../dto/request-additional-fund.dto';
 import { ReviewAdditionalFundDto } from '../dto/review-additional-fund.dto';
-import { FinanceService } from '../../finance/services/finance.service'; 
+import { FinanceService } from '../../finance/services/finance.service';
 import { PrismaService } from '../../../database/prisma.service';
 import { StorageService } from '../../../providers/storage/storage.service';
 
@@ -35,15 +35,29 @@ export class EventsService {
   ) { }
 
   private async checkGroupAccess(eventCommunityGroupId: number, user: ActiveUserData) {
+    // 1. Jika di dalam grup yang sama (RT lihat RT-nya sendiri, RW lihat RW-nya sendiri)
     if (eventCommunityGroupId === user.communityGroupId) return;
 
+    // Ambil data grup acara DAN grup user sekaligus (untuk efisiensi bisa dipisah jika perlu, tapi ini aman)
+    const eventGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: eventCommunityGroupId },
+      select: { parentId: true },
+    });
+
+    // 2. Akses Top-Down: Atasan (RW) melihat acara Bawahan (RT)
+    // Jika parentId dari grup acara adalah ID grup user (RW) yang login, maka izinkan!
+    if (eventGroup?.parentId === user.communityGroupId) return;
+
+    // 3. Akses Bottom-Up: Bawahan (RT/Warga) melihat acara Atasan (RW)
+    // (Pertahankan ini jika Warga RT diizinkan melihat acara gabungan tingkat RW)
     const userGroup = await this.prisma.communityGroup.findUnique({
       where: { id: user.communityGroupId },
       select: { parentId: true },
     });
 
-    if (userGroup?.parentId && eventCommunityGroupId === userGroup.parentId) return;
+    if (userGroup?.parentId === eventCommunityGroupId) return;
 
+    // 4. Jika semua kondisi di atas gagal, blokir aksesnya.
     throw new ForbiddenException('Anda tidak memiliki akses ke data acara di lingkungan ini');
   }
 
@@ -82,22 +96,44 @@ export class EventsService {
 
     const group = await this.prisma.communityGroup.findUnique({
       where: { id: user.communityGroupId },
-      select: { parentId: true },
+      select: { parentId: true, children: { select: { id: true } } },
     });
 
+    // Tambahkan Parent ID (RW) jika user adalah RT
     if (group?.parentId) {
       groupIds.push(group.parentId);
     }
 
+    // Tambahkan Children ID (RT) jika user adalah RW
+    if (group?.children?.length) {
+      groupIds.push(...group.children.map(c => c.id));
+    }
+
+    
+
     // Auto-complete events that have passed endDate
     await this.autoCompleteExpiredEvents(groupIds);
 
+    // Ambil data dari Repository
     const events = await this.eventsRepo.findAll(groupIds);
 
+    // Filter khusus untuk warga (RESIDENT)
     if (user.roleType === SystemRoleType.RESIDENT) {
-      return events.filter(event => event.status !== EventStatus.DRAFT);
+      // Warga HANYA boleh melihat event yang sudah disetujui/berjalan/selesai.
+      // Sembunyikan DRAFT, SUBMITTED, UNDER_REVIEW, dan REJECTED.
+      const publicStatuses: EventStatus[] = [
+        EventStatus.APPROVED,
+        EventStatus.FUNDED,
+        EventStatus.ONGOING,
+        EventStatus.COMPLETED,
+        EventStatus.SETTLED,
+        EventStatus.CANCELLED // (Opsional) Biarkan warga tahu jika acara dibatalkan
+      ];
+      
+      return events.filter(event => publicStatuses.includes(event.status));
     }
 
+    // Admin, Treasurer, Leader bisa melihat semua status (Draft dsb)
     return events;
   }
 
@@ -270,7 +306,7 @@ export class EventsService {
     }
 
     // Parse items
-    const items: { title: string; amount: number }[] = 
+    const items: { title: string; amount: number }[] =
       typeof dto.items === 'string' ? JSON.parse(dto.items) : dto.items;
 
     if (!items || items.length === 0) {
@@ -288,8 +324,8 @@ export class EventsService {
     }
 
     const totalExpenses = items.reduce((sum, item) => sum + item.amount, 0);
-    const remainingAmount = typeof dto.remainingAmount === 'string' 
-      ? parseFloat(dto.remainingAmount) 
+    const remainingAmount = typeof dto.remainingAmount === 'string'
+      ? parseFloat(dto.remainingAmount)
       : dto.remainingAmount;
     const budgetFunded = Number(event.budgetEstimated);
 
@@ -332,7 +368,7 @@ export class EventsService {
     // Store receipt images on event
     await this.prisma.event.update({
       where: { id: eventId },
-      data: { 
+      data: {
         receiptImages: receiptImageUrls,
         budgetActual: totalExpenses,
       },
@@ -401,7 +437,7 @@ export class EventsService {
   }
 
   // ==========================================
-  // 9. SETTLE EVENT (Leader/Admin, COMPLETED → SETTLED)
+  // 9. SETTLE EVENT (Creator Only, COMPLETED → SETTLED)
   //    Input hasil event, foto hasil, deskripsi
   // ==========================================
   async settleEvent(
@@ -418,10 +454,18 @@ export class EventsService {
       throw new BadRequestException('Hanya acara berstatus COMPLETED yang dapat diselesaikan laporannya');
     }
 
+    // 👇 PERBAIKAN DI SINI: Pengecekan Otorisasi Kepemilikan (Creator)
+    if (event.createdById !== user.id) {
+      throw new ForbiddenException('Hanya pembuat acara yang diizinkan untuk menyelesaikan laporan acara ini.');
+    }
+
+    // Opsional: Anda tetap bisa mempertahankan cek role untuk keamanan ganda, 
+    // tapi sebenarnya cek createdById di atas sudah sangat kuat dan absolut.
     const canSettleRoles: SystemRoleType[] = [SystemRoleType.LEADER, SystemRoleType.ADMIN];
     if (!canSettleRoles.includes(user.roleType)) {
       throw new ForbiddenException('Hanya Ketua atau Admin yang dapat menyelesaikan laporan acara');
     }
+    // 👆 AKHIR PERBAIKAN
 
     // Upload result photos
     const resultImageUrls: string[] = [];
@@ -442,8 +486,8 @@ export class EventsService {
     });
 
     // Update status to SETTLED
-    const photoInfo = resultImageUrls.length > 0 
-      ? `${resultImageUrls.length} foto dokumentasi dilampirkan. ` 
+    const photoInfo = resultImageUrls.length > 0
+      ? `${resultImageUrls.length} foto dokumentasi dilampirkan. `
       : '';
 
     const settledEvent = await this.eventsRepo.updateEventStatus(

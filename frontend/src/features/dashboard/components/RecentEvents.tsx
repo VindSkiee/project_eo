@@ -7,129 +7,204 @@ import {
   CardTitle,
 } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
-import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";
-import { CalendarDays, ArrowRight, FileText } from "lucide-react";
+import {
+  CalendarDays,
+  ArrowRight,
+  Activity,
+  User,
+  Users,
+  Clock,
+} from "lucide-react";
 import type { EventItem } from "@/shared/types";
+import type { EventStatusType } from "@/features/event/types";
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
-
-const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant; dotColor: string }> = {
-  DRAFT:            { label: "Draft",        variant: "secondary",   dotColor: "bg-slate-400" },
-  SUBMITTED:        { label: "Diajukan",     variant: "secondary",   dotColor: "bg-amber-400" },
-  APPROVED:         { label: "Disetujui",    variant: "default",     dotColor: "bg-emerald-400" },
-  FUNDED:           { label: "Dana Cair",    variant: "default",     dotColor: "bg-blue-400" },
-  ONGOING:          { label: "Berjalan",     variant: "default",     dotColor: "bg-sky-400" },
-  COMPLETED:        { label: "Selesai",      variant: "secondary",   dotColor: "bg-green-400" },
-  SETTLED:          { label: "Final",        variant: "secondary",   dotColor: "bg-emerald-500" },
-  UNDER_REVIEW:     { label: "Review Dana",  variant: "outline",     dotColor: "bg-indigo-400" },
-  REJECTED:         { label: "Ditolak",      variant: "destructive", dotColor: "bg-red-400" },
-  CANCELLED:        { label: "Dibatalkan",   variant: "destructive", dotColor: "bg-rose-400" },
-  PENDING_APPROVAL: { label: "Menunggu",     variant: "secondary",   dotColor: "bg-amber-400" },
+// ─── Konfigurasi Status ──────────────────────────────────────────────
+const statusConfig: Record<EventStatusType, { label: string; className: string }> = {
+  DRAFT: { label: "Draft", className: "bg-slate-100 text-slate-600 border-slate-200" },
+  SUBMITTED: { label: "Diajukan", className: "bg-amber-50 text-amber-700 border-amber-200" },
+  UNDER_REVIEW: { label: "Dalam Review", className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  APPROVED: { label: "Disetujui", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  REJECTED: { label: "Ditolak", className: "bg-red-50 text-red-700 border-red-200" },
+  CANCELLED: { label: "Dibatalkan", className: "bg-rose-50 text-rose-700 border-rose-200" },
+  FUNDED: { label: "Didanai", className: "bg-blue-50 text-blue-700 border-blue-200" },
+  ONGOING: { label: "Berlangsung", className: "bg-purple-50 text-purple-700 border-purple-200" },
+  COMPLETED: { label: "Selesai", className: "bg-teal-50 text-teal-700 border-teal-200" },
+  SETTLED: { label: "Diselesaikan", className: "bg-green-50 text-green-700 border-green-200" },
 };
 
 function getStatusInfo(status: string) {
-  return STATUS_MAP[status] ?? { label: status, variant: "secondary" as BadgeVariant, dotColor: "bg-slate-400" };
+  return statusConfig[status as EventStatusType] ?? {
+    label: status,
+    className: "bg-slate-50 text-slate-600 border-slate-200",
+  };
 }
 
+// ─── Props ───────────────────────────────────────────────────────────
 interface RecentEventsCardProps {
   events: EventItem[];
   loading: boolean;
-  /** Link for "View all" button */
   viewAllLink?: string;
-  /** Max items to show, default 5 */
+  eventDetailBasePath?: string;
   limit?: number;
 }
 
+// ─── Component ───────────────────────────────────────────────────────
 export function RecentEventsCard({
   events,
   loading,
   viewAllLink = "/dashboard/kegiatan",
+  eventDetailBasePath = "/dashboard/events",
   limit = 5,
 }: RecentEventsCardProps) {
   const items = events.slice(0, limit);
 
-  return (
-    <Card className="flex flex-col">
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <div>
-          <CardTitle className="text-base font-semibold text-slate-900 font-poppins">
-            Kegiatan Terbaru
-          </CardTitle>
-          <CardDescription className="text-xs">
-            {limit} kegiatan terakhir
-          </CardDescription>
-        </div>
-        <Link to={viewAllLink}>
-          <Button variant="ghost" size="sm" className="text-primary hover:text-primary text-xs">
-            Semua <ArrowRight className="h-3 w-3 ml-1" />
-          </Button>
-        </Link>
-      </CardHeader>
-      <CardContent className="flex-1">
-        {loading ? (
-          <div className="space-y-3">
+  // ─── Loading Skeleton ─────────────────────────────────────────────
+  if (loading) {
+    return (
+      <Card className="flex flex-col border-0 ring-1 ring-slate-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] rounded-2xl overflow-hidden h-full">
+        <CardHeader className="pb-4 pt-5 px-6 border-b border-slate-100">
+          <div className="h-5 w-32 bg-slate-200 rounded animate-pulse" />
+          <div className="h-3 w-40 bg-slate-100 rounded mt-1 animate-pulse" />
+        </CardHeader>
+        <CardContent className="flex-1 p-0">
+          <div className="divide-y divide-slate-100">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
-                <div className="flex-1 space-y-1.5">
-                  <Skeleton className="h-3.5 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
+              <div key={i} className="flex items-center gap-3 px-5 py-4">
+                <Skeleton className="h-10 w-10 rounded-xl bg-slate-200 shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4 bg-slate-200" />
+                  <Skeleton className="h-3 w-1/2 bg-slate-100" />
                 </div>
-                <Skeleton className="h-5 w-16 rounded-full shrink-0" />
               </div>
             ))}
           </div>
-        ) : items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <CalendarDays className="h-8 w-8 text-slate-300 mb-2" />
-            <p className="text-sm text-slate-500">Belum ada kegiatan.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ─── Empty State ──────────────────────────────────────────────────
+  if (items.length === 0) {
+    return (
+      <Card className="flex flex-col border-0 ring-1 ring-slate-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] rounded-2xl overflow-hidden h-full">
+        <CardHeader className="pb-4 pt-5 px-6 border-b border-slate-100">
+          <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <Activity className="h-4 w-4 text-primary" />
+            Kegiatan Terbaru
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <div className="h-16 w-16 rounded-full bg-slate-50 flex items-center justify-center mb-4 ring-4 ring-slate-100/50">
+            <CalendarDays className="h-8 w-8 text-slate-300" />
           </div>
-        ) : (
-          <div className="space-y-1">
-            {items.map((event) => {
-              const info = getStatusInfo(event.status);
-              return (
-                <Link
-                  key={event.id}
-                  to={`/dashboard/events/${event.id}`}
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors group"
-                >
-                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
-                    <FileText className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate group-hover:text-primary transition-colors">
+          <h4 className="text-sm font-medium text-slate-700">Belum ada kegiatan</h4>
+          <p className="text-xs text-slate-400 mt-1 max-w-[220px]">
+            Kegiatan yang dibuat akan muncul di sini. Mulai dengan membuat kegiatan baru.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ─── Main Content ─────────────────────────────────────────────────
+  return (
+    <Card className="flex flex-col border-0 ring-1 ring-slate-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] rounded-2xl overflow-hidden h-full bg-white">
+      {/* Header */}
+      <CardHeader className="flex flex-row items-center justify-between pb-4 pt-5 px-6 border-b border-slate-100">
+        <div>
+          <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <Activity className="h-4 w-4 text-primary" />
+            Kegiatan Terbaru
+          </CardTitle>
+          <CardDescription className="text-xs text-slate-500 mt-1">
+            Menampilkan {limit} kegiatan terakhir
+          </CardDescription>
+        </div>
+        <Link
+          to={viewAllLink}
+          className="group inline-flex items-center text-xs font-medium text-slate-500 hover:text-primary transition-colors px-2 py-1 rounded-md hover:bg-slate-50"
+        >
+          Lihat semua
+          <ArrowRight className="h-3.5 w-3.5 ml-1 transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      </CardHeader>
+
+      {/* List */}
+      <CardContent className="flex-1 p-0">
+        <div className="divide-y divide-slate-100">
+          {items.map((event) => {
+            const info = getStatusInfo(event.status);
+            const startDate = event.startDate ? new Date(event.startDate) : null;
+            const formattedDate = startDate
+              ? startDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+              : 'Tanggal belum ditentukan';
+
+            return (
+              <Link
+                key={event.id}
+                to={`${eventDetailBasePath}/${event.id}`}
+                className="flex items-start gap-3 px-5 py-4 hover:bg-slate-50 transition-all duration-200 group"
+              >
+                {/* Tanggal Box */}
+                <div className="flex flex-col items-center justify-center h-12 w-12 rounded-xl bg-slate-50 border border-slate-100 shrink-0 group-hover:border-primary/30 group-hover:bg-primary/5 transition-colors">
+                  {startDate ? (
+                    <>
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase leading-none mt-1">
+                        {startDate.toLocaleDateString('id-ID', { month: 'short' })}
+                      </span>
+                      <span className="text-base font-bold text-slate-800 leading-tight">
+                        {startDate.getDate()}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[10px] font-semibold text-slate-300 text-center">—</span>
+                  )}
+                </div>
+
+                {/* Konten Utama */}
+                <div className="flex-1 min-w-0">
+                  {/* Baris judul dan badge */}
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <h4 className="text-sm font-medium text-slate-900 truncate group-hover:text-primary transition-colors">
                       {event.title}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {event.startDate ? formatDate(event.startDate) : "—"}
-                      {event.createdBy?.fullName && (
-                        <span className="hidden sm:inline"> · {event.createdBy.fullName}</span>
-                      )}
-                    </p>
+                    </h4>
+                    <Badge
+                      variant="outline"
+                      className={`text-[9px] px-1.5 py-0.5 font-medium shadow-none shrink-0 ${info.className}`}
+                    >
+                      {info.label}
+                    </Badge>
                   </div>
-                  <Badge variant={info.variant} className="text-[10px] shrink-0 gap-1">
-                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${info.dotColor}`} />
-                    {info.label}
-                  </Badge>
-                </Link>
-              );
-            })}
-          </div>
-        )}
+
+                  {/* Metadata dengan ikon */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                    {event.communityGroup?.name && (
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3.5 w-3.5 text-slate-400" />
+                        <span className="truncate max-w-[100px]">{event.communityGroup.name}</span>
+                      </span>
+                    )}
+                    {event.createdBy?.fullName && (
+                      <span className="flex items-center gap-1">
+                        <User className="h-3.5 w-3.5 text-slate-400" />
+                        <span className="truncate max-w-[100px]">{event.createdBy.fullName}</span>
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5 text-slate-400" />
+                      <span className="truncate">{formattedDate}</span>
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-// Backward-compatible named export
+// Ekspor dengan nama backward-compatible
 export { RecentEventsCard as RecentEvents };

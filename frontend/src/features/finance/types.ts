@@ -45,12 +45,12 @@ export interface BillBreakdown {
 export interface MyBill {
   totalAmount: number;
   currency: string;
-  breakdown: BillBreakdown[];
+  breakdown: Array<{ type: string; groupName: string; amount: number; destinationWalletId: number }>;
   dueDateDescription: string;
-  /** Bulan pertama yang belum dibayar (1=Jan ... 12=Des) */
   nextBillMonth: number;
-  /** Tahun dari bulan pertama yang belum dibayar */
   nextBillYear: number;
+  unpaidMonthsCount: number; // Tipe baru dari backend
+  baseMonthlyAmount: number; // Tipe baru dari backend
 }
 
 export interface Contribution {

@@ -380,6 +380,7 @@ export default function FinanceDashboard() {
           events={events}
           loading={loading}
           viewAllLink="/dashboard/kegiatan-bendahara"
+          eventDetailBasePath="/dashboard/events-bendahara"
         />
       </div>
 

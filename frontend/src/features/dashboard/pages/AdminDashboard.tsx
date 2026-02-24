@@ -167,6 +167,7 @@ export default function AdminDashboard() {
         events={events}
         loading={loading}
         viewAllLink="/dashboard/kegiatan-rt"
+        eventDetailBasePath="/dashboard/events-rt"
       />
 
       {/* Quick Links */}

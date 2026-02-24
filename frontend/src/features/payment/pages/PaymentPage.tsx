@@ -25,27 +25,8 @@ import { paymentService } from "@/features/payment/services/paymentService";
 import type { PaymentItem } from "@/shared/types";
 import { DateRangeFilter } from "@/shared/components/DateRangeFilter";
 import type { DateRange } from "@/shared/components/DateRangeFilter";
-
-// === HELPERS ===
-
-function formatRupiah(amount: number): string {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-function formatDateTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import { DataTable } from "@/shared/components/DataTable";
+import { formatRupiah, formatDateTime } from "@/shared/helpers/formatters";
 
 type PaymentStatus = "PENDING" | "PAID" | "CANCELLED" | "EXPIRED" | "FAILED" | "REFUNDED";
 
@@ -103,6 +84,7 @@ export default function PaymentPage() {
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [filterTab, setFilterTab] = useState<"today" | "all">("today");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
   // Role-aware navigation
@@ -144,8 +126,17 @@ export default function PaymentPage() {
       (p.user?.email || "").toLowerCase().includes(search.toLowerCase()) ||
       getTransactionLabel(p.orderId).toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;
+    const paymentDate = new Date(p.createdAt);
+    if (filterTab === "today") {
+      const today = new Date();
+      if (
+        paymentDate.getDate() !== today.getDate() ||
+        paymentDate.getMonth() !== today.getMonth() ||
+        paymentDate.getFullYear() !== today.getFullYear()
+      ) return false;
+    }
     if (dateRange?.from) {
-      const d = new Date(p.createdAt);
+      const d = new Date(paymentDate);
       d.setHours(0, 0, 0, 0);
       const from = new Date(dateRange.from);
       from.setHours(0, 0, 0, 0);
@@ -262,16 +253,36 @@ export default function PaymentPage() {
             {paidCount} berhasil · {pendingCount} menunggu · {failedCount} gagal/batal
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap justify-end">
-          <DateRangeFilter
-            value={dateRange}
-            onChange={setDateRange}
-            placeholder="Filter tanggal"
-          />
+        <div className="flex gap-2 flex-wrap justify-end items-center">
+          <div className="flex bg-slate-100 p-1 rounded-lg shrink-0">
+            <button
+              onClick={() => { setFilterTab("today"); setDateRange(undefined); }}
+              className={`flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                filterTab === "today" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Hari Ini
+            </button>
+            <button
+              onClick={() => setFilterTab("all")}
+              className={`flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                filterTab === "all" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Semua
+            </button>
+          </div>
+          {filterTab === "all" && (
+            <DateRangeFilter
+              value={dateRange}
+              onChange={setDateRange}
+              placeholder="Filter tanggal"
+            />
+          )}
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Cari order ID, nama, atau email..."
+              placeholder="Cari order ID atau nama..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -281,106 +292,93 @@ export default function PaymentPage() {
       </div>
 
       {/* Transaction List — styled like FinancePage */}
-      {loading ? (
-        <Card>
-          <CardContent className="py-6 space-y-3">
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
-          </CardContent>
-        </Card>
-      ) : filteredPayments.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-10 text-center">
-            <CreditCard className="h-10 w-10 text-slate-300 mb-3" />
-            <p className="text-sm text-slate-500 font-medium">
-              {search ? "Pembayaran tidak ditemukan." : "Belum ada data pembayaran."}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">#</th>
-                  <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">Transaksi</th>
-                  <th className="text-left text-xs font-medium text-slate-500 px-4 py-3 hidden sm:table-cell">Metode</th>
-                  <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">Status</th>
-                  <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">Jumlah</th>
-                  <th className="text-left text-xs font-medium text-slate-500 px-4 py-3 hidden md:table-cell">Tanggal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPayments.map((payment, idx) => {
-                  const txIcon = getTransactionIcon(payment.orderId);
-                  const TxIcon = txIcon.icon;
-                  const sc = getStatusConfig(payment.status);
-
-                  return (
-                    <tr
-                      key={payment.id}
-                      className="border-b border-slate-50 hover:bg-slate-50/80 cursor-pointer transition-colors"
-                      onClick={() => navigate(getDetailPath(payment.id))}
-                    >
-                      <td className="px-4 py-3 text-sm text-slate-500">
-                        {idx + 1}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${txIcon.bg}`}
-                          >
-                            <TxIcon className={`h-4 w-4 ${txIcon.color}`} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-slate-900 truncate">
-                              {getTransactionLabel(payment.orderId)}
-                            </p>
-                            <p className="text-xs text-slate-500 truncate">
-                              {payment.user?.fullName || "—"}
-                              <span className="text-slate-400 hidden sm:inline"> · {payment.orderId}</span>
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 hidden sm:table-cell">
-                        <p className="text-xs text-slate-500">
-                          {payment.methodCategory
-                            ? methodLabels[payment.methodCategory] || payment.methodCategory
-                            : "—"}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant={sc.variant} className="text-[10px]">
-                          {sc.label}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className={`font-medium text-sm ${
-                          payment.status === "PAID" ? "text-emerald-600" :
-                          payment.status === "REFUNDED" ? "text-blue-600" :
-                          "text-slate-900"
-                        }`}>
-                          {formatRupiah(Number(payment.amount))}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <p className="text-sm text-slate-500">
-                          {payment.paidAt
-                            ? formatDateTime(payment.paidAt)
-                            : formatDateTime(payment.createdAt)}
-                        </p>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+      <Card>
+        <DataTable<PaymentItem>
+          columns={[
+            {
+              key: "transaction",
+              header: "Transaksi",
+              render: (payment) => {
+                const txIcon = getTransactionIcon(payment.orderId);
+                const TxIcon = txIcon.icon;
+                return (
+                  <div className="flex items-center gap-2.5">
+                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${txIcon.bg}`}>
+                      <TxIcon className={`h-4 w-4 ${txIcon.color}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate">
+                        {getTransactionLabel(payment.orderId)}
+                      </p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {payment.user?.fullName || "—"}
+                        <span className="text-slate-400 hidden sm:inline"> · {payment.orderId}</span>
+                      </p>
+                    </div>
+                  </div>
+                );
+              },
+            },
+            {
+              key: "method",
+              header: "Metode",
+              hideBelow: "sm",
+              render: (payment) => (
+                <span className="text-xs text-slate-500">
+                  {payment.methodCategory
+                    ? methodLabels[payment.methodCategory] || payment.methodCategory
+                    : "—"}
+                </span>
+              ),
+            },
+            {
+              key: "status",
+              header: "Status",
+              render: (payment) => {
+                const sc = getStatusConfig(payment.status);
+                return (
+                  <Badge variant={sc.variant} className="text-[10px]">
+                    {sc.label}
+                  </Badge>
+                );
+              },
+            },
+            {
+              key: "amount",
+              header: "Jumlah",
+              render: (payment) => (
+                <span className={`font-medium text-sm ${
+                  payment.status === "PAID" ? "text-emerald-600" :
+                  payment.status === "REFUNDED" ? "text-blue-600" :
+                  "text-slate-900"
+                }`}>
+                  {formatRupiah(Number(payment.amount))}
+                </span>
+              ),
+            },
+            {
+              key: "date",
+              header: "Tanggal",
+              hideBelow: "md",
+              render: (payment) => (
+                <span className="text-sm text-slate-500">
+                  {payment.paidAt
+                    ? formatDateTime(payment.paidAt)
+                    : formatDateTime(payment.createdAt)}
+                </span>
+              ),
+            },
+          ]}
+          data={filteredPayments}
+          keyExtractor={(p) => p.id}
+          loading={loading}
+          showRowNumber
+          rowNumberPadded
+          onRowClick={(payment) => navigate(getDetailPath(payment.id))}
+          emptyIcon={CreditCard}
+          emptyTitle={search ? "Pembayaran tidak ditemukan." : filterTab === "today" ? "Belum ada pembayaran hari ini." : "Belum ada data pembayaran."}
+        />
+      </Card>
     </div>
   );
 }

@@ -227,6 +227,7 @@ export default function EventsPage() {
                         loading={loading}
                         searchQuery={search}
                         onEventClick={(id) => navigate(getEventDetailPath(id))}
+                        currentUserId={(() => { try { const u = localStorage.getItem("user"); return u ? JSON.parse(u).id : undefined; } catch { return undefined; } })()}
                     />
                 </TabsContent>
             </Tabs>

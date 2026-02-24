@@ -1,6 +1,9 @@
+import { useNavigate } from "react-router-dom";
 import { Users, Pencil, Trash2 } from "lucide-react";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
+import { DataTable, type ColumnDef } from "@/shared/components/DataTable";
+import { Badge } from "@/shared/ui/badge"; // Pastikan Badge di-import
 import type { UserItem } from "@/shared/types";
 import { getRoleLabel } from "@/shared/helpers/roleLabel";
 import { getAvatarUrl } from "@/shared/helpers/avatarUrl";
@@ -14,6 +17,13 @@ function sortMembers(members: UserItem[], currentUserId?: string): UserItem[] {
     return 3;
   };
   return [...members].sort((a, b) => getPriority(a) - getPriority(b));
+}
+
+function getRoleBadgeClass(roleType: string) {
+  if (roleType === "LEADER") return "bg-indigo-50 text-indigo-700";
+  if (roleType === "ADMIN") return "bg-blue-50 text-blue-700";
+  if (roleType === "TREASURER") return "bg-amber-50 text-amber-700";
+  return "bg-slate-50 text-slate-600";
 }
 
 interface WargaTableProps {
@@ -35,6 +45,8 @@ export function WargaTable({
   onEdit,
   onDelete,
 }: WargaTableProps) {
+  const navigate = useNavigate(); // Gunakan hook navigasi
+
   if (loading) {
     return (
       <div className="space-y-3">
@@ -61,138 +73,147 @@ export function WargaTable({
     );
   }
 
+  const sorted = sortMembers(users, currentUserId);
+
+  const columns: ColumnDef<UserItem>[] = [
+    {
+      key: "name",
+      header: "Nama",
+      render: (user) => {
+        const isSelf = !!(currentUserId && user.id === currentUserId);
+        return (
+          <div className="flex items-center gap-3">
+            <Avatar className={`h-8 w-8 shrink-0 ${isSelf ? "ring-2 ring-emerald-500/30 ring-offset-1" : ""}`}>
+              {getAvatarUrl(user.profileImage) && (
+                <AvatarImage src={getAvatarUrl(user.profileImage)!} alt={user.fullName} className="object-cover" />
+              )}
+              <AvatarFallback
+                className={`text-xs font-medium ${
+                  isSelf
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600"
+                }`}
+              >
+                {user.fullName?.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <div className="flex items-center gap-2">
+                <p
+                  className={`transition-colors ${
+                    isSelf
+                      ? "font-bold text-emerald-700"
+                      : "font-medium text-slate-700 group-hover:text-slate-900"
+                  }`}
+                >
+                  {user.fullName}
+                </p>
+                {/* === BADGE "SAYA" SERAGAM DENGAN COMPONENT EVENT === */}
+                {isSelf && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-medium bg-emerald-50 text-emerald-700 border-emerald-200 shrink-0">
+                    Saya
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 sm:hidden mt-0.5">{user.email}</p>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "email",
+      header: "Email",
+      hideBelow: "sm",
+      cellClassName: "text-slate-500",
+      render: (user) => user.email,
+    },
+    {
+      key: "role",
+      header: "Role",
+      render: (user) => {
+        const roleType = user.roleType || user.role?.type || "RESIDENT";
+        return (
+          <span
+            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeClass(roleType)}`}
+          >
+            {getRoleLabel(roleType)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "group",
+      header: "Grup",
+      hideBelow: "md",
+      cellClassName: "text-slate-500",
+      render: (user) => (
+        <span className="text-sm">{user.communityGroup?.name || "—"}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (user) => (
+        <span
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+            user.isActive ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
+              user.isActive ? "bg-emerald-500" : "bg-rose-500"
+            }`}
+          />
+          {user.isActive ? "Aktif" : "Nonaktif"}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Aksi",
+      render: (user) => (
+        <div
+          className="flex items-center justify-center gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => onEdit(user)}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-blue-500 transition-all duration-200"
+            title="Edit Warga"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => onDelete(user.id, user.fullName)}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-rose-500 transition-all duration-200"
+            title="Hapus Warga"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50/50">
-              <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider w-12">
-                No
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Nama
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider hidden sm:table-cell">
-                Email
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Role
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider hidden md:table-cell">
-                Grup
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Aksi
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {sortMembers(users, currentUserId).map((user, idx) => {
-              const isSelf = !!(currentUserId && user.id === currentUserId);
-              return (
-              <tr
-                key={user.id}
-                onClick={() => onUserClick(user.id)}
-                className="group hover:bg-slate-50/80 transition-all duration-200 cursor-pointer"
-              >
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <span className="text-sm text-slate-400 font-mono">
-                    {(idx + 1).toString().padStart(2, "0")}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-left">
-                  <div className="flex items-center gap-3">
-                    <Avatar className={`h-8 w-8 shrink-0 ${isSelf ? 'ring-2 ring-primary/30' : ''}`}>
-                      {getAvatarUrl(user.profileImage) && <AvatarImage src={getAvatarUrl(user.profileImage)!} alt={user.fullName} className="object-cover" />}
-                      <AvatarFallback className={`text-xs font-medium ${isSelf ? 'bg-primary/20 text-primary' : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600'}`}>
-                        {user.fullName?.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className={`transition-colors ${isSelf ? "font-bold text-primary" : "font-medium text-slate-700 group-hover:text-slate-900"}`}>
-                        {user.fullName}
-                        {isSelf && <span className="ml-1.5 text-[10px] font-semibold bg-brand-green text-white px-1.5 py-0.5 rounded-full">saya</span>}
-                      </p>
-                      <p className="text-xs text-slate-400 sm:hidden mt-0.5">{user.email}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center text-slate-500 hidden sm:table-cell">
-                  {user.email}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <span
-                    className={`
-                      inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                      ${
-                        user.roleType === "LEADER" || user.role?.type === "LEADER"
-                          ? "bg-indigo-50 text-indigo-700"
-                          : user.roleType === "ADMIN" || user.role?.type === "ADMIN"
-                          ? "bg-blue-50 text-blue-700"
-                          : user.roleType === "TREASURER" || user.role?.type === "TREASURER"
-                          ? "bg-amber-50 text-amber-700"
-                          : "bg-slate-50 text-slate-600"
-                      }
-                    `}
-                  >
-                    {getRoleLabel((user.roleType || user.role?.type) ?? "RESIDENT")}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center text-slate-500 hidden md:table-cell">
-                  <span className="text-sm">{user.communityGroup?.name || "—"}</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <span
-                    className={`
-                      inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                      ${user.isActive ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}
-                    `}
-                  >
-                    <span
-                      className={`
-                        h-1.5 w-1.5 rounded-full mr-1.5
-                        ${user.isActive ? "bg-emerald-500" : "bg-rose-500"}
-                      `}
-                    />
-                    {user.isActive ? "Aktif" : "Nonaktif"}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center">
-                  <div
-                    className="flex items-center justify-center gap-1"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      onClick={() => onEdit(user)}
-                      className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-blue-500 transition-all duration-200"
-                      title="Edit Warga"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => onDelete(user.id, user.fullName)}
-                      className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-rose-500 transition-all duration-200"
-                      title="Hapus Warga"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Footer dengan info jumlah data */}
-      <div className="px-6 py-3 border-t border-slate-50 bg-slate-50/30 text-xs text-slate-400 text-center">
-        Menampilkan {users.length} warga
-      </div>
+      <DataTable
+        columns={columns}
+        data={sorted}
+        keyExtractor={(u) => u.id}
+        // === LOGIKA NAVIGASI JIKA KLIK DIRI SENDIRI ===
+        onRowClick={(u) => {
+          if (currentUserId && u.id === currentUserId) {
+            navigate("/dashboard/profile"); // Sesuaikan route-nya jika path profile Anda berbeda
+          } else {
+            onUserClick(u.id);
+          }
+        }}
+        showRowNumber
+        rowNumberPadded
+        footerText={`Menampilkan ${users.length} warga`}
+      />
     </div>
   );
 }

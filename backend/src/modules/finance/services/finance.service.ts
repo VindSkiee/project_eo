@@ -193,23 +193,52 @@ export class FinanceService {
 
   // B. Ambil Riwayat Transaksi (Bisa pilih mau lihat RT atau RW)
   async getTransparencyHistory(user: ActiveUserData, scope: 'RT' | 'RW') {
-    let targetGroupId = user.communityGroupId; // Default: RT
+    const userGroup = await this.prisma.communityGroup.findUnique({
+      where: { id: user.communityGroupId },
+      select: { type: true, parentId: true }
+    });
 
-    // Jika user ingin melihat data RW, kita cari ID RW-nya
+    if (!userGroup) throw new NotFoundException('Data grup tidak ditemukan');
+
+    let targetGroupId = user.communityGroupId;
+
+    // Logika penentuan target ID yang aman
     if (scope === 'RW') {
-      const userGroup = await this.prisma.communityGroup.findUnique({
-        where: { id: user.communityGroupId },
-        select: { parentId: true }
-      });
-      
-      if (!userGroup?.parentId) {
+      if (userGroup.type === 'RW') {
+        // Jika user memang RW, targetnya ya grup dia sendiri
+        targetGroupId = user.communityGroupId; 
+      } else if (userGroup.parentId) {
+        // Jika user adalah RT, targetnya adalah Parent (RW)
+        targetGroupId = userGroup.parentId;
+      } else {
         throw new BadRequestException('Lingkungan Anda tidak terdaftar dalam RW manapun');
       }
-      targetGroupId = userGroup.parentId;
+    } else {
+      // Jika scope === 'RT'
+      if (userGroup.type === 'RW') {
+        // Jika RW mau lihat RT spesifik, biasanya butuh param ID RT-nya. 
+        // Tapi untuk default (warga/admin RT), biarkan pakai grup sendiri
+        targetGroupId = user.communityGroupId;
+      }
     }
 
-    // Reuse fungsi yang sudah ada (aman & efisien)
-    return this.financeRepo.findTransactions(targetGroupId);
+    // Ambil data mentah dari repo
+    const rawTransactions = await this.financeRepo.findTransactions(targetGroupId);
+
+    // FIX DECIMAL: Map/Format data agar angka Decimal berubah jadi Number biasa
+    return rawTransactions.map((tx) => ({
+      id: tx.id,
+      type: tx.type, // 'INCOME' | 'EXPENSE'
+      amount: Number(tx.amount), // <--- INI KUNCI UTAMANYA
+      description: tx.description,
+      createdAt: tx.createdAt,
+      // Jika Anda punya saldo (balanceAfter), pastikan di-convert juga:
+      // balanceAfter: Number(tx.balanceAfter), 
+      
+      // Ambil relasi (optional chaining untuk menghindari error jika null)
+      eventName: tx.event?.title || null,
+      adminName: tx.createdBy?.fullName || 'Sistem',
+    }));
   }
 
   // ==========================================
@@ -411,12 +440,12 @@ export class FinanceService {
       },
     });
 
-    // Fetch all RESIDENT users in this group with their lastPaidPeriod
+    // Fetch only RESIDENT users in this group (exclude LEADER, ADMIN, TREASURER)
     const members = await this.prisma.user.findMany({
       where: {
         communityGroupId: groupId,
         isActive: true,
-        role: { type: { in: ['RESIDENT', 'ADMIN', 'TREASURER'] } },
+        role: { type: 'RESIDENT' },
       },
       select: {
         id: true,

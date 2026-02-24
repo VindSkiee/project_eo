@@ -7,7 +7,6 @@ import { Separator } from "@/shared/ui/separator";
 import { ArrowLeft, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { userService } from "@/shared/services/userService";
-import { financeService } from "@/features/finance/services/financeService";
 import { loadCustomRoleLabels, getRoleLabel } from "@/shared/helpers/roleLabel";
 import type { UserItem, Transaction } from "@/shared/types";
 import {
@@ -17,11 +16,10 @@ import {
   UserAdditionalInfo,
 } from "@/features/profile/components";
 
-// Helpers moved to components
-
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  
   const [user, setUser] = useState<UserItem | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,60 +35,38 @@ export default function UserDetailPage() {
   const fetchUser = async () => {
     setLoading(true);
     try {
-      // Ensure custom role labels are loaded before rendering
+      // Pastikan custom role label sudah termuat dari local storage
       await loadCustomRoleLabels();
 
+      // Panggil backend: userService.getById seharusnya sudah memuat relasi 'payments' & 'contributions'
       const userData = await userService.getById(id!);
       setUser(userData);
-      // Store resolved label in state — same pattern as DashboardLayout
+      
       const resolvedType = userData.roleType || userData.role?.type || "";
       setResolvedRoleLabel(getRoleLabel(resolvedType));
 
-      // If RESIDENT, also fetch transactions
-      if (resolvedType === "RESIDENT") {
-        try {
-          const txns = await financeService.getTransparencyHistory("RT");
-          // Filter transactions that relate to this user (by description or contributorUserId)
-          setTransactions(txns);
-        } catch {
-          // Transactions may fail for role reasons - non-critical
-        }
+      // Jika user adalah RESIDENT, mapping data pembayarannya ke bentuk Transaction
+      if (resolvedType === "RESIDENT" && userData.paymentGatewayTxs && userData.paymentGatewayTxs.length > 0) {
+        const mappedHistory: Transaction[] = userData.paymentGatewayTxs.map((p: any) => ({
+          id: p.id,
+          walletId: 0, // <--- TAMBAHKAN INI (Dummy ID agar TS tidak protes)
+          description: `Pembayaran Iuran (Order: ${p.orderId || 'Sistem'})`,
+          type: "CREDIT" as const, // <--- Gunakan 'as const' jika TS meminta union type 'CREDIT' | 'DEBIT'
+          amount: Number(p.amount), 
+          createdAt: p.createdAt,
+        }));
+        
+        setTransactions(mappedHistory);
+      } else {
+        setTransactions([]);
       }
+      
     } catch {
       toast.error("Gagal memuat data pengguna.");
     } finally {
       setLoading(false);
     }
   };
-
-  // Determine which months have been paid (DUES/CREDIT transactions with the user's name)
-  const paidMonths = new Set<number>();
-  const userResolvedRole = user?.roleType || user?.role?.type || "";
-  if (userResolvedRole === "RESIDENT" && user) {
-    transactions.forEach((tx) => {
-      const txDate = new Date(tx.createdAt);
-      if (
-        txDate.getFullYear() === currentYear &&
-        tx.type === "CREDIT" &&
-        tx.description?.toLowerCase().includes("iuran")
-      ) {
-        // Check if this transaction mentions the user's name
-        if (
-          tx.description?.includes(user.fullName) ||
-          tx.createdBy?.fullName === user.fullName
-        ) {
-          paidMonths.add(txDate.getMonth());
-        }
-      }
-    });
-  }
-
-  // User's recent transactions
-  const userTransactions = transactions.filter(
-    (tx) =>
-      tx.createdBy?.fullName === user?.fullName ||
-      tx.description?.includes(user?.fullName || "___NONE___")
-  ).slice(0, 10);
 
   if (loading) {
     return (
@@ -135,6 +111,8 @@ export default function UserDetailPage() {
     );
   }
 
+  const userResolvedRole = user.roleType || user.role?.type || "";
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Back button */}
@@ -148,9 +126,15 @@ export default function UserDetailPage() {
       {/* === RESIDENT-ONLY: Dues Grid & Transaction History === */}
       {userResolvedRole === "RESIDENT" && (
         <>
-          <DuesStatusGrid paidMonths={paidMonths} currentYear={currentYear} />
+          <DuesStatusGrid
+            targetYear={currentYear} // Menggunakan tahun berjalan otomatis
+            createdAt={user.createdAt}          
+            lastPaidPeriod={user.lastPaidPeriod} 
+            contributions={user.contributions || []} 
+          />
           <Separator />
-          <UserTransactionHistory transactions={userTransactions} />
+          {/* Oper mapping transaksi yang bersih ke tabel */}
+          <UserTransactionHistory transactions={transactions} />
         </>
       )}
 

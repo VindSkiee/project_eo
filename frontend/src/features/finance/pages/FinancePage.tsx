@@ -52,6 +52,8 @@ import type {
 } from "@/shared/types";
 import { TransactionTable, FundRequestTable, ChildrenWalletsSection } from "@/features/finance/components";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
+import { DateRangeFilter } from "@/shared/components/DateRangeFilter";
+import type { DateRange } from "@/shared/components/DateRangeFilter";
 
 // === HELPERS ===
 
@@ -81,6 +83,8 @@ export default function FinancePage() {
   const [loading, setLoading] = useState(true);
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [searchTx, setSearchTx] = useState("");
+  const [filterTabTx, setFilterTabTx] = useState<"today" | "all">("today");
+  const [dateRangeTx, setDateRangeTx] = useState<DateRange | undefined>(undefined);
   const [searchFR, setSearchFR] = useState("");
 
   // Check role from localStorage
@@ -92,7 +96,9 @@ export default function FinancePage() {
     return null;
   })();
 
-  const showChildrenWallets = userRole === "LEADER" || userRole === "ADMIN" || userRole === "TREASURER";
+  // Only Leader and RW-level Treasurer can see all RT wallets
+  // Admin and RT-level Treasurer should NOT see children wallets
+  const isRwLevel = userRole === "LEADER";
   const canCreateTransaction = userRole === "TREASURER" || userRole === "LEADER";
   const canCreateFundRequest = userRole === "TREASURER" || userRole === "ADMIN";
 
@@ -124,12 +130,20 @@ export default function FinancePage() {
   const childrenBasePath = userRole === "TREASURER" ? "/dashboard/progres-iuran-bendahara"
     : userRole === "ADMIN" ? "/dashboard/keuangan-rt" : "/dashboard/keuangan-rt";
   const isChildTreasurer = userRole === "TREASURER" && wallet?.communityGroup?.type === "RT";
+  const isRwTreasurer = userRole === "TREASURER" && wallet?.communityGroup?.type === "RW";
+  const showChildrenWallets = isRwLevel || isRwTreasurer;
 
   useEffect(() => {
     fetchData();
-    if (showChildrenWallets) fetchChildrenWallets();
     if (canCreateFundRequest) fetchEvents();
   }, []);
+
+  // Fetch children wallets after wallet is loaded (so we know if RW-level)
+  useEffect(() => {
+    if (wallet && (isRwLevel || (userRole === "TREASURER" && wallet.communityGroup?.type === "RW"))) {
+      fetchChildrenWallets();
+    }
+  }, [wallet]);
 
   const fetchEvents = async () => {
     try {
@@ -174,9 +188,32 @@ export default function FinancePage() {
 
   const pendingFR = fundRequests.filter((f) => f.status === "PENDING");
 
-  const filteredTx = transactions.filter(
-    (t) => t.description.toLowerCase().includes(searchTx.toLowerCase())
-  );
+  const filteredTx = transactions.filter((t) => {
+    const matchSearch = t.description.toLowerCase().includes(searchTx.toLowerCase());
+    if (!matchSearch) return false;
+    const txDate = new Date(t.createdAt);
+    if (filterTabTx === "today") {
+      const today = new Date();
+      if (
+        txDate.getDate() !== today.getDate() ||
+        txDate.getMonth() !== today.getMonth() ||
+        txDate.getFullYear() !== today.getFullYear()
+      ) return false;
+    }
+    if (dateRangeTx?.from) {
+      const d = new Date(txDate);
+      d.setHours(0, 0, 0, 0);
+      const from = new Date(dateRangeTx.from);
+      from.setHours(0, 0, 0, 0);
+      if (d < from) return false;
+      if (dateRangeTx.to) {
+        const to = new Date(dateRangeTx.to);
+        to.setHours(23, 59, 59, 999);
+        if (d > to) return false;
+      }
+    }
+    return true;
+  });
 
   const filteredFR = fundRequests.filter(
     (f) =>
@@ -436,14 +473,41 @@ export default function FinancePage() {
 
         {/* === TAB: Transaksi === */}
         <TabsContent value="transaksi" className="space-y-4">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Cari transaksi..."
-              value={searchTx}
-              onChange={(e) => setSearchTx(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+            <div className="flex bg-slate-100 p-1 rounded-lg shrink-0">
+              <button
+                onClick={() => { setFilterTabTx("today"); setDateRangeTx(undefined); }}
+                className={`flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  filterTabTx === "today" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Hari Ini
+              </button>
+              <button
+                onClick={() => setFilterTabTx("all")}
+                className={`flex-1 sm:flex-none px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  filterTabTx === "all" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Semua
+              </button>
+            </div>
+            {filterTabTx === "all" && (
+              <DateRangeFilter
+                value={dateRangeTx}
+                onChange={setDateRangeTx}
+                placeholder="Filter tanggal"
+              />
+            )}
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Cari transaksi..."
+                value={searchTx}
+                onChange={(e) => setSearchTx(e.target.value)}
+                className="pl-9"
+              />
+            </div>
           </div>
 
           {loading ? (
@@ -459,7 +523,7 @@ export default function FinancePage() {
               <CardContent className="flex flex-col items-center justify-center py-10 text-center">
                 <Wallet className="h-10 w-10 text-slate-300 mb-3" />
                 <p className="text-sm text-slate-500 font-medium">
-                  {searchTx ? "Transaksi tidak ditemukan." : "Belum ada transaksi."}
+                  {searchTx ? "Transaksi tidak ditemukan." : filterTabTx === "today" ? "Belum ada transaksi hari ini." : "Belum ada transaksi."}
                 </p>
               </CardContent>
             </Card>

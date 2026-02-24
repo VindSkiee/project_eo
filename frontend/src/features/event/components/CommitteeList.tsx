@@ -34,9 +34,6 @@ export function CommitteeList({ event, currentUserId }: CommitteeListProps) {
         </CardTitle>
       </CardHeader>
       
-      {/* Tambahkan overflow-y-auto dan batasi tinggi agar bisa di-scroll.
-        Ubah padding agar lebih proporsional.
-      */}
       <CardContent className="pt-4 overflow-y-auto flex-1">
         {committeeMembers.length === 0 ? (
           <div className="text-center py-6">
@@ -54,15 +51,13 @@ export function CommitteeList({ event, currentUserId }: CommitteeListProps) {
               return (
                 <div
                   key={idx}
-                  // Kurangi padding dari p-3.5 menjadi p-2.5 atau px-3 py-2 agar lebih compact
                   className={`flex flex-col sm:flex-row sm:items-center justify-between px-3 py-2.5 rounded-xl bg-white border shadow-sm transition-all gap-2 group ${
                     isSelf ? "border-emerald-200 bg-emerald-50/30" : "border-slate-100 hover:border-primary/20 hover:shadow-md"
                   }`}
                 >
                   <div className="flex items-start sm:items-center gap-3 flex-1 min-w-0">
                     
-                    {/* Perkecil Avatar dari h-10 w-10 menjadi h-9 w-9 */}
-                    <Avatar className={`h-9 w-9 shrink-0 ${isSelf ? 'ring-2 ring-emerald-500 ring-offset-1' : 'border border-slate-100'}`}>
+                    <Avatar className={`h-9 w-9 shrink-0 ${isSelf ? 'ring-2 ring-emerald-500/30 ring-offset-1' : 'border border-slate-100'}`}>
                       {getAvatarUrl(participant.user?.profileImage) && (
                         <AvatarImage src={getAvatarUrl(participant.user?.profileImage)!} alt={participant.user?.fullName} className="object-cover" />
                       )}
@@ -77,14 +72,14 @@ export function CommitteeList({ event, currentUserId }: CommitteeListProps) {
                           {participant.user?.fullName}
                         </p>
                         
+                        {/* === BADGE "SAYA" YANG SUDAH DISERAGAMKAN === */}
                         {isSelf && (
-                          <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-500 text-white px-1.5 py-0.5 rounded-full shrink-0">
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-medium bg-emerald-50 text-emerald-700 border-emerald-200 shrink-0">
                             Saya
-                          </span>
+                          </Badge>
                         )}
                       </div>
                       
-                      {/* Hilangkan email jika terlalu panjang, atau biarkan text-xs */}
                       <p className="text-[11px] text-slate-500 truncate mb-1.5">
                         {participant.user?.email}
                       </p>

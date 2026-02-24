@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Button } from "@/shared/ui/button";
@@ -45,34 +45,48 @@ function formatRupiah(amount: number): string {
   }).format(amount);
 }
 
-/** Check if a member has paid for a specific month based on lastPaidPeriod + contributions */
+/** Check if a member has paid for a specific month safely */
 function isPaidForMonth(member: DuesProgressMember, month: number, year: number): boolean {
-  // Check contributions first (explicit payment records for this month)
-  const hasContribution = member.contributions.some(
+  // 1. Safe check for explicit contributions (Fallback to empty array if undefined)
+  const safeContributions = member.contributions || [];
+  const hasContribution = safeContributions.some(
     (c) => c.month === month && c.year === year
   );
   if (hasContribution) return true;
 
-  // Fallback: check lastPaidPeriod (cumulative tracker)
+  // 2. Fallback check for lastPaidPeriod using robust Year/Month comparison
   if (member.lastPaidPeriod) {
-    const lastPaid = new Date(member.lastPaidPeriod);
-    const checkDate = new Date(year, month - 1, 1); // month is 1-based
-    return lastPaid >= checkDate;
+    const lp = new Date(member.lastPaidPeriod);
+    const lpYear = lp.getFullYear();
+    const lpMonth = lp.getMonth() + 1; // 1-based
+
+    // Jika tahun kalender lebih kecil dari tahun lastPaid, berarti sudah lunas
+    if (year < lpYear) return true;
+    // Jika tahunnya sama, pastikan bulan kalender <= bulan lastPaid
+    if (year === lpYear && month <= lpMonth) return true;
   }
 
   return false;
 }
 
-/** Check if member existed in a given month (based on createdAt) */
+/** Check if member existed in a given month cleanly via strict Year/Month */
 function memberExistedInMonth(member: DuesProgressMember, month: number, year: number): boolean {
+  if (!member.createdAt) return true; // Safety fallback untuk data lama
+  
   const created = new Date(member.createdAt);
-  return created <= new Date(year, month, 0); // last day of the month
+  const cYear = created.getFullYear();
+  const cMonth = created.getMonth() + 1;
+  
+  if (year > cYear) return true;
+  if (year === cYear && month >= cMonth) return true;
+  
+  return false;
 }
 
 type FilterMode = "all" | "lunas" | "belum";
 
 export default function GroupDuesProgressPage() {
-  const { groupId } = useParams<{ groupId: string }>();
+  const { groupId: paramGroupId } = useParams<{ groupId: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<DuesProgressData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,14 +97,29 @@ export default function GroupDuesProgressPage() {
   const currentMonth = new Date().getMonth() + 1; // 1-based
   const currentYear = new Date().getFullYear();
 
+  // Resolve effective group ID
+  const resolvedGroupId = (() => {
+    const fromParam = Number(paramGroupId);
+    if (!isNaN(fromParam) && fromParam > 0) return fromParam;
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) {
+        const user = JSON.parse(stored);
+        if (user.communityGroupId) return Number(user.communityGroupId);
+      }
+    } catch { /* ignore */ }
+    return null;
+  })();
+
   useEffect(() => {
-    if (groupId) fetchData();
-  }, [groupId, selectedYear]);
+    if (resolvedGroupId) fetchData();
+  }, [resolvedGroupId, selectedYear]);
 
   const fetchData = async () => {
+    if (!resolvedGroupId) return;
     setLoading(true);
     try {
-      const res = await financeService.getDuesProgress(Number(groupId), selectedYear);
+      const res = await financeService.getDuesProgress(resolvedGroupId, selectedYear);
       setData(res);
     } catch {
       toast.error("Gagal memuat data progres iuran.");
@@ -100,18 +129,23 @@ export default function GroupDuesProgressPage() {
   };
 
   /** Is the member fully paid for all applicable months up to current */
-  const isFullyPaid = (member: DuesProgressMember): boolean => {
-    const maxMonth = selectedYear === currentYear ? currentMonth : 12;
+  const isFullyPaid = useCallback((member: DuesProgressMember): boolean => {
+    // Determine max month to check. If looking at future year, default to checking up to month 12
+    // but future months will be ignored anyway by 'memberExistedInMonth' or skipped logically.
+    const maxMonth = selectedYear >= currentYear ? currentMonth : 12;
+
     for (let m = 1; m <= maxMonth; m++) {
-      if (memberExistedInMonth(member, m, selectedYear) && !isPaidForMonth(member, m, selectedYear)) {
-        return false;
+      if (memberExistedInMonth(member, m, selectedYear)) {
+        if (!isPaidForMonth(member, m, selectedYear)) {
+          return false;
+        }
       }
     }
     return true;
-  };
+  }, [selectedYear, currentYear, currentMonth]);
 
   const filteredMembers = useMemo(() => {
-    if (!data) return [];
+    if (!data?.members) return [];
     let members = data.members;
 
     // Search filter
@@ -132,27 +166,22 @@ export default function GroupDuesProgressPage() {
     }
 
     return members;
-  }, [data, search, filter, selectedYear]);
+  }, [data, search, filter, isFullyPaid]);
 
   // Statistics
-  const totalMembers = data?.members.length || 0;
-  const paidCount = data?.members.filter((m) => isFullyPaid(m)).length || 0;
+  const totalMembers = data?.members?.length || 0;
+  const paidCount = data?.members?.filter((m) => isFullyPaid(m)).length || 0;
   const unpaidCount = totalMembers - paidCount;
 
   // Year options (last 3 years)
   const yearOptions = Array.from({ length: 3 }, (_, i) => currentYear - i);
-
-  // Back navigation
-  const handleBack = () => {
-    navigate(-1);
-  };
 
   return (
     <TooltipProvider>
       <div className="space-y-6 animate-in fade-in duration-500">
         {/* Header */}
         <div className="flex items-start gap-3">
-          <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0 mt-0.5">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="shrink-0 mt-0.5">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1 min-w-0">
@@ -208,9 +237,9 @@ export default function GroupDuesProgressPage() {
             <CardContent className="flex items-center gap-3 py-3">
               <Info className="h-4 w-4 text-primary shrink-0" />
               <p className="text-sm text-slate-700">
-                Iuran: <span className="font-semibold">{formatRupiah(data.duesRule.amount)}</span>/bulan
+                Iuran: <span className="font-semibold">{formatRupiah(Number(data.duesRule.amount))}</span>/bulan
                 {data.parentDuesRule && (
-                  <> · Iuran RW: <span className="font-semibold">{formatRupiah(data.parentDuesRule.amount)}</span>/bulan</>
+                  <> · Iuran RW: <span className="font-semibold">{formatRupiah(Number(data.parentDuesRule.amount))}</span>/bulan</>
                 )}
                 {data.duesRule.dueDay && (
                   <> · Jatuh tempo tanggal <span className="font-semibold">{data.duesRule.dueDay}</span></>
@@ -284,9 +313,7 @@ export default function GroupDuesProgressPage() {
                     <th className="text-left py-3 px-4 font-semibold text-slate-600 min-w-[140px]">Nama</th>
                     <th className="text-left py-3 px-4 font-semibold text-slate-600 hidden sm:table-cell min-w-[120px]">No. HP</th>
                     <th className="text-center py-3 px-2 font-semibold text-slate-600" colSpan={12}>
-                      <div className="flex items-center justify-center gap-1">
-                        <span>Progres Bulanan {selectedYear}</span>
-                      </div>
+                      Progres Bulanan {selectedYear}
                     </th>
                     <th className="text-center py-3 px-4 font-semibold text-slate-600 w-20">Status</th>
                   </tr>
@@ -385,18 +412,23 @@ function MemberRow({
       <td className="py-3 px-4 text-slate-600 hidden sm:table-cell">
         {member.phone || "—"}
       </td>
+      
       {/* 12 Month blocks */}
       {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
         const existed = memberExistedInMonth(member, month, year);
         const paid = existed && isPaidForMonth(member, month, year);
         const isCurrent = year === currentYear && month === currentMonth;
-        const isFuture = year === currentYear && month > currentMonth;
-        const contribution = member.contributions.find(
+        
+        // Cek aman untuk list contribution manual dari backend
+        const safeContributions = member.contributions || [];
+        const contribution = safeContributions.find(
           (c) => c.month === month && c.year === year
         );
 
-        let bgColor = "bg-slate-200"; // not registered
+        let bgColor = "bg-slate-200"; // Default: Belum terdaftar
         let tooltipText = `${MONTH_FULL[month - 1]} — Belum terdaftar`;
+
+        const isStrictlyFuture = year > currentYear || (year === currentYear && month > currentMonth);
 
         if (existed) {
           if (paid) {
@@ -405,7 +437,7 @@ function MemberRow({
             if (contribution) {
               tooltipText += ` (${new Date(contribution.paidAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })})`;
             }
-          } else if (isFuture) {
+          } else if (isStrictlyFuture) {
             bgColor = "bg-slate-300/50";
             tooltipText = `${MONTH_FULL[month - 1]} — Belum jatuh tempo`;
           } else {
@@ -433,6 +465,7 @@ function MemberRow({
           </td>
         );
       })}
+      
       {/* Status badge */}
       <td className="py-3 px-4 text-center">
         <Badge

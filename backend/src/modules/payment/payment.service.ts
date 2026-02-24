@@ -187,10 +187,8 @@ export class PaymentService {
     return payment;
   }
 
-  // 👇 UPDATE METHOD INI
-  // Izinkan menerima parameter "params" dengan tipe dari Prisma
-  async getAllTransactions(params?: Prisma.PaymentGatewayTxFindManyArgs) {
-    return this.prisma.paymentGatewayTx.findMany(params);
+  async getAllTransactions() {
+    return this.paymentRepo.findAll();
   }
 
   // ==========================================

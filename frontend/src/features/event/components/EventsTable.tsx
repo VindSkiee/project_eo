@@ -1,27 +1,10 @@
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Badge } from "@/shared/ui/badge";
 import { CalendarDays } from "lucide-react";
+import { DataTable, type ColumnDef } from "@/shared/components/DataTable";
+import { formatRupiah, formatDate } from "@/shared/helpers/formatters";
 import type { EventItem } from "@/shared/types";
 import type { EventStatusType } from "@/features/event/types";
-
-function formatRupiah(amount: number | string): string {
-  const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(num || 0);
-}
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 const statusConfig: Record<
   EventStatusType,
@@ -39,11 +22,19 @@ const statusConfig: Record<
   SETTLED: { label: "Diselesaikan", className: "bg-green-50 text-green-700 border-green-200" },
 };
 
+function getStatusInfo(status: string) {
+  return statusConfig[status as EventStatusType] || {
+    label: status,
+    className: "bg-slate-50 text-slate-600 border-slate-200",
+  };
+}
+
 interface EventsTableProps {
   events: EventItem[];
   loading: boolean;
   searchQuery: string;
   onEventClick: (eventId: string) => void;
+  currentUserId?: string;
 }
 
 export function EventsTable({
@@ -51,6 +42,7 @@ export function EventsTable({
   loading,
   searchQuery,
   onEventClick,
+  currentUserId,
 }: EventsTableProps) {
   if (loading) {
     return (
@@ -80,16 +72,87 @@ export function EventsTable({
     );
   }
 
+  const columns: ColumnDef<EventItem>[] = [
+    {
+      key: "title",
+      header: "Judul",
+      render: (event) => (
+        <div>
+          <p className="font-medium text-slate-700 group-hover:text-slate-900 transition-colors">
+            {event.title}
+          </p>
+          <p className="text-xs text-slate-400 truncate max-w-[250px] mt-0.5">
+            {event.description}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "submitter",
+      header: "Pengaju",
+      // Tambahkan class agar isi sel menjadi rata tengah (sesuai gambar)
+      cellClassName: "text-center",
+      render: (event) => (
+        // Gunakan flex-col dan items-center agar nama dan RT/RW rata tengah
+        <div className="flex flex-col items-center justify-center gap-0.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm text-slate-600">
+              {event.createdBy?.fullName || "—"}
+            </span>
+            {currentUserId && event.createdById === currentUserId && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-200">
+                Saya
+              </Badge>
+            )}
+          </div>
+          {event.communityGroup?.name && (
+            <span className="text-xs text-slate-400">{event.communityGroup.name}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "budget",
+      header: "Anggaran",
+      cellClassName: "text-center", // Tambahkan center jika ingin rata tengah seperti gambar
+      render: (event) => (
+        <span className="text-sm font-medium text-slate-700">
+          {formatRupiah(event.budgetEstimated)}
+        </span>
+      ),
+    },
+    {
+      key: "date",
+      header: "Tanggal",
+      cellClassName: "text-center", // Tambahkan center jika ingin rata tengah seperti gambar
+      render: (event) => (
+        <span className="text-sm text-slate-500">
+          {formatDate(event.startDate)}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      cellClassName: "text-center", // Memastikan status badge ada di tengah
+      render: (event) => {
+        const sc = getStatusInfo(event.status);
+        return (
+          <Badge variant="outline" className={`text-xs px-2.5 py-0.5 ${sc.className}`}>
+            {sc.label}
+          </Badge>
+        );
+      },
+    },
+  ];
+
   // Mobile card layout + Desktop table layout
   return (
     <>
       {/* Mobile Cards */}
       <div className="block md:hidden space-y-3">
         {events.map((event) => {
-          const sc = statusConfig[event.status as EventStatusType] || {
-            label: event.status,
-            className: "bg-slate-50 text-slate-600 border-slate-200",
-          };
+          const sc = getStatusInfo(event.status);
           return (
             <div
               key={event.id}
@@ -108,7 +171,19 @@ export function EventsTable({
                 {event.description}
               </p>
               <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>{event.createdBy?.fullName || "—"}</span>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5">
+                    <span>{event.createdBy?.fullName || "—"}</span>
+                    {currentUserId && event.createdById === currentUserId && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-200">
+                        Saya
+                      </Badge>
+                    )}
+                  </div>
+                  {event.communityGroup?.name && (
+                    <span className="text-slate-400">{event.communityGroup.name}</span>
+                  )}
+                </div>
                 <span className="font-medium text-slate-700">
                   {formatRupiah(event.budgetEstimated)}
                 </span>
@@ -127,86 +202,15 @@ export function EventsTable({
 
       {/* Desktop Table */}
       <div className="hidden md:block bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/50">
-                <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider w-12">
-                  No
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Judul
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Pengaju
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Anggaran
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Tanggal
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {events.map((event, idx) => {
-                const sc = statusConfig[event.status as EventStatusType] || {
-                  label: event.status,
-                  className: "bg-slate-50 text-slate-600 border-slate-200",
-                };
-                return (
-                  <tr
-                    key={event.id}
-                    className="group hover:bg-slate-50/80 transition-all duration-200 cursor-pointer"
-                    onClick={() => onEventClick(event.id)}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <span className="text-sm text-slate-400 font-mono">
-                        {(idx + 1).toString().padStart(2, "0")}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div>
-                        <p className="font-medium text-slate-700 group-hover:text-slate-900 transition-colors">
-                          {event.title}
-                        </p>
-                        <p className="text-xs text-slate-400 truncate max-w-[250px] mt-0.5">
-                          {event.description}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <span className="text-sm text-slate-600">
-                        {event.createdBy?.fullName || "—"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <span className="text-sm font-medium text-slate-700">
-                        {formatRupiah(event.budgetEstimated)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <span className="text-sm text-slate-500">
-                        {formatDate(event.startDate)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <Badge variant="outline" className={`text-xs ${sc.className}`}>
-                        {sc.label}
-                      </Badge>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="px-6 py-3 border-t border-slate-50 bg-slate-50/30 text-xs text-slate-400 text-center">
-          Menampilkan {events.length} kegiatan
-        </div>
+        <DataTable
+          columns={columns}
+          data={events}
+          keyExtractor={(e) => e.id}
+          onRowClick={(e) => onEventClick(e.id)}
+          showRowNumber
+          rowNumberPadded
+          footerText={`Menampilkan ${events.length} kegiatan`}
+        />
       </div>
     </>
   );

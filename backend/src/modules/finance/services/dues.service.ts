@@ -12,7 +12,7 @@ export class DuesService {
     private readonly duesRepo: DuesRepository,
     private readonly financeService: FinanceService,
     private readonly prisma: PrismaService
-  ) {}
+  ) { }
 
   // ==========================================
   // 1. SETTING IURAN
@@ -38,12 +38,12 @@ export class DuesService {
       },
       duesRule: group.duesRule
         ? {
-            id: group.duesRule.id,
-            amount: Number(group.duesRule.amount),
-            dueDay: group.duesRule.dueDay,
-            isActive: group.duesRule.isActive,
-            updatedAt: group.duesRule.updatedAt,
-          }
+          id: group.duesRule.id,
+          amount: Number(group.duesRule.amount),
+          dueDay: group.duesRule.dueDay,
+          isActive: group.duesRule.isActive,
+          updatedAt: group.duesRule.updatedAt,
+        }
         : null,
       children: group.children.map((child) => ({
         group: {
@@ -53,12 +53,12 @@ export class DuesService {
         },
         duesRule: child.duesRule
           ? {
-              id: child.duesRule.id,
-              amount: Number(child.duesRule.amount),
-              dueDay: child.duesRule.dueDay,
-              isActive: child.duesRule.isActive,
-              updatedAt: child.duesRule.updatedAt,
-            }
+            id: child.duesRule.id,
+            amount: Number(child.duesRule.amount),
+            dueDay: child.duesRule.dueDay,
+            isActive: child.duesRule.isActive,
+            updatedAt: child.duesRule.updatedAt,
+          }
           : null,
       })),
     };
@@ -68,65 +68,103 @@ export class DuesService {
   // 2. LIHAT TAGIHAN (Split Bill Calculation)
   // ==========================================
   async getMyBill(user: ActiveUserData) {
-    // Ambil data hierarki dari Repo + lastPaidPeriod user secara paralel
+    const now = new Date();
+
+    // 1. Ambil data hierarki + lastPaidPeriod & createdAt user secara paralel
     const [groupData, userRecord] = await Promise.all([
       this.duesRepo.findGroupHierarchyWithRules(user.communityGroupId),
       this.prisma.user.findUnique({
         where: { id: user.id },
-        select: { lastPaidPeriod: true },
+        select: { lastPaidPeriod: true, createdAt: true }, // Ambil createdAt untuk warga baru
       }),
     ]);
 
     if (!groupData) throw new NotFoundException('Data lingkungan tidak ditemukan');
+    if (!userRecord) throw new NotFoundException('Data warga tidak ditemukan');
 
-    const breakdown: Array<{ type: string; groupName: string; amount: number; destinationWalletId: number }> = [];
-    let totalAmount = 0;
+    // 2. Hitung TARIF DASAR BULANAN (Base Monthly Amount)
+    let baseMonthlyTotal = 0;
+    const baseBreakdown: Array<{ type: string; groupName: string; amount: number; destinationWalletId: number }> = [];
 
-    // A. Hitung Jatah RT
-    if (groupData.duesRule && groupData.duesRule.isActive) {
+    // A. Jatah RT
+    if (groupData.duesRule?.isActive) {
       const rtAmount = Number(groupData.duesRule.amount);
-      totalAmount += rtAmount;
-      breakdown.push({
-        type: 'RT',
-        groupName: groupData.name,
-        amount: rtAmount,
-        destinationWalletId: groupData.id 
+      baseMonthlyTotal += rtAmount;
+      baseBreakdown.push({
+        type: 'RT', groupName: groupData.name, amount: rtAmount, destinationWalletId: groupData.id
       });
     }
 
-    // B. Hitung Jatah RW (Jika ada Parent)
-    if (groupData.parent && groupData.parent.duesRule && groupData.parent.duesRule.isActive) {
+    // B. Jatah RW
+    if (groupData.parent?.duesRule?.isActive) {
       const rwAmount = Number(groupData.parent.duesRule.amount);
-      totalAmount += rwAmount;
-      breakdown.push({
-        type: 'RW',
-        groupName: groupData.parent.name,
-        amount: rwAmount,
-        destinationWalletId: groupData.parent.id
+      baseMonthlyTotal += rwAmount;
+      baseBreakdown.push({
+        type: 'RW', groupName: groupData.parent.name, amount: rwAmount, destinationWalletId: groupData.parent.id
       });
     }
 
-    // C. Hitung bulan tagihan pertama (untuk tampilan selektor bulan di frontend)
-    const now = new Date();
+    // 3. Tentukan BULAN MULAI DITAGIH (Next Bill Period)
     let nextBillMonth: number;
     let nextBillYear: number;
-    if (userRecord?.lastPaidPeriod) {
+
+    if (userRecord.lastPaidPeriod) {
+      // Skenario A: Warga Lama yang sudah pernah bayar. Lanjut dari bulan terakhir bayar + 1
       const lp = new Date(userRecord.lastPaidPeriod);
-      nextBillMonth = lp.getMonth() + 2; // 0-indexed → 1-indexed, +1 = bulan berikutnya
-      nextBillYear  = lp.getFullYear();
-      if (nextBillMonth > 12) { nextBillMonth = 1; nextBillYear += 1; }
+      nextBillMonth = lp.getMonth() + 2; // getMonth is 0-indexed, +2 to get next month 1-indexed
+      nextBillYear = lp.getFullYear();
+
+      if (nextBillMonth > 12) {
+        nextBillMonth = 1;
+        nextBillYear += 1;
+      }
     } else {
-      nextBillMonth = now.getMonth() + 1; // 0-indexed → 1-indexed
-      nextBillYear  = now.getFullYear();
+      // Skenario B: Warga Baru (Belum pernah bayar). Mulai tagih dari bulan/tahun AKUN DIBUAT
+      const joinDate = new Date(userRecord.createdAt);
+      nextBillMonth = joinDate.getMonth() + 1;
+      nextBillYear = joinDate.getFullYear();
+    }
+
+    // 4. Hitung TOTAL BULAN TERTUNGGAK (Unpaid Months)
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    // Rumus: Selisih tahun * 12 + selisih bulan + 1 (karena bulan berjalan ikut dihitung)
+    let unpaidMonthsCount = (currentYear - nextBillYear) * 12 + (currentMonth - nextBillMonth) + 1;
+
+    // Jika user bayar lebih awal (Advance Payment), tagihan bulan ini 0
+    if (unpaidMonthsCount < 0) {
+      unpaidMonthsCount = 0;
+    }
+
+    // 5. Kalkulasi Tagihan Aktual (Tarif Dasar x Jumlah Bulan Tertunggak)
+    const totalAmount = baseMonthlyTotal * unpaidMonthsCount;
+
+    // Sesuaikan nominal breakdown sesuai jumlah bulan agar Payment Gateway memproses dengan benar
+    const breakdown = baseBreakdown.map(b => ({
+      ...b,
+      amount: b.amount * unpaidMonthsCount
+    }));
+
+    // 6. Buat deskripsi yang informatif untuk UI
+    const dueDay = groupData.duesRule?.dueDay || 10;
+    let dueDateDescription = `Setiap tanggal ${dueDay} bulan berjalan.`;
+
+    if (unpaidMonthsCount > 0) {
+      dueDateDescription = `Terdapat tunggakan ${unpaidMonthsCount} bulan (dimulai dari bulan ${String(nextBillMonth).padStart(2, '0')}/${nextBillYear}).`;
+    } else {
+      dueDateDescription = `Terima kasih! Iuran Anda sudah lunas hingga bulan berjalan.`;
     }
 
     return {
       totalAmount,
       currency: 'IDR',
       breakdown,
-      dueDateDescription: `Setiap tanggal ${groupData.duesRule?.dueDay || 10} bulan berjalan`,
+      dueDateDescription,
       nextBillMonth,
       nextBillYear,
+      unpaidMonthsCount,
+      baseMonthlyAmount: baseMonthlyTotal // Opsional: Beritahu frontend tarif aslinya
     };
   }
 
@@ -181,7 +219,7 @@ export class DuesService {
 
     // Berapa bulan yang dibayar? (Pembulatan ke bawah untuk safety)
     const monthsPaid = monthlyTotal > 0 ? Math.floor(totalPaid / monthlyTotal) : 0;
-    
+
     // Hitung total nominal uang yang akan masuk ke masing-masing kas
     const totalToRT = rtRate * monthsPaid;
     const totalToRW = rwRate * monthsPaid;
@@ -248,13 +286,13 @@ export class DuesService {
       } else {
         // Belum pernah bayar → bayarkan untuk bulan berjalan
         startMonth = now.getMonth() + 1; // 0-indexed → 1-indexed
-        startYear  = now.getFullYear();
+        startYear = now.getFullYear();
       }
 
       // Catat Contribution per bulan yang dibayarkan
       for (let i = 0; i < monthsPaid; i++) {
         let contribMonth = startMonth + i;
-        let contribYear  = startYear;
+        let contribYear = startYear;
         while (contribMonth > 12) { contribMonth -= 12; contribYear += 1; }
 
         // Idempotency: jangan catat dua kali untuk bulan yang sama
@@ -265,11 +303,11 @@ export class DuesService {
         if (!existing) {
           await prismaClient.contribution.create({
             data: {
-              userId:   user.id,
-              amount:   monthlyTotal,
-              month:    contribMonth,
-              year:     contribYear,
-              paidAt:   now,
+              userId: user.id,
+              amount: monthlyTotal,
+              month: contribMonth,
+              year: contribYear,
+              paidAt: now,
               // Hubungkan ke PaymentGatewayTx hanya untuk bulan pertama (unique constraint)
               ...(i === 0 && paymentGatewayTxId ? { paymentGatewayTxId } : {}),
             },
@@ -279,14 +317,14 @@ export class DuesService {
 
       // Update lastPaidPeriod ke hari terakhir bulan terakhir yang dibayar
       let lastMonth = startMonth + monthsPaid - 1;
-      let lastYear  = startYear;
+      let lastYear = startYear;
       while (lastMonth > 12) { lastMonth -= 12; lastYear += 1; }
       // new Date(year, month, 0) → hari terakhir bulan month (1-indexed) pada year
       const newPaidPeriod = new Date(lastYear, lastMonth, 0);
 
       await prismaClient.user.update({
         where: { id: user.id },
-        data:  { lastPaidPeriod: newPaidPeriod },
+        data: { lastPaidPeriod: newPaidPeriod },
       });
     }
   }

@@ -1,36 +1,52 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
-import { Prisma, User } from '@prisma/client';
+import { Prisma, User, PaymentGatewayStatus } from '@prisma/client'; // <-- Import PaymentGatewayStatus
 
-// 1. DEFINISI TYPE (Wajib ada Wallet di dalam CommunityGroup)
+// =========================================================================
+// 1. SINGLE SOURCE OF TRUTH (Konfigurasi Include)
+// =========================================================================
+// Kita definisikan object include di sini dan menggunakan enum bawaan Prisma
+// agar TypeScript tidak protes soal string "PAID" atau "desc".
+const userIncludeOptions = {
+  role: true,
+  communityGroup: {
+    include: {
+      wallet: true,
+      duesRule: true, // Ditambahkan agar frontend bisa baca aturan iuran
+      parent: true,   // Ditambahkan agar frontend bisa tau RW-nya
+    },
+  },
+  paymentGatewayTxs: { 
+    where: { 
+      status: PaymentGatewayStatus.PAID, // <-- Gunakan Enum Prisma
+    },
+    orderBy: { 
+      createdAt: Prisma.SortOrder.desc,  // <-- Gunakan Enum Prisma
+    }
+  }
+} satisfies Prisma.UserInclude;
+
+// =========================================================================
+// 2. DEFINISI TYPE OTOMATIS
+// =========================================================================
+// Tipe ini sekarang otomatis mengikuti struktur 'userIncludeOptions' di atas.
+// Jika nanti Anda menambah/mengurangi tabel, tipe datanya akan otomatis update!
 export type UserWithRelations = Prisma.UserGetPayload<{
-  include: {
-    role: true;
-    communityGroup: {
-      include: { wallet: true } // <--- Syarat utama
-    };
-  };
+  include: typeof userIncludeOptions;
 }>;
+
 
 @Injectable()
 export class UsersRepository {
   constructor(private readonly prisma: PrismaService) { }
 
-  // --- REUSABLE INCLUDE OBJECT ---
-  // Biar tidak capek ngetik berulang-ulang dan konsisten
-  private readonly userInclude = {
-    role: true,
-    communityGroup: {
-      include: {
-        wallet: true, // <--- INI KUNCINYA
-      },
-    },
-  };
+  // Gunakan konstanta yang sudah kita buat di atas
+  private readonly userInclude = userIncludeOptions;
 
   async findByEmail(email: string): Promise<UserWithRelations | null> {
     return this.prisma.user.findUnique({
       where: { email },
-      include: this.userInclude, // Pakai object include yang sudah lengkap
+      include: this.userInclude,
     });
   }
 
@@ -44,7 +60,7 @@ export class UsersRepository {
   async create(data: Prisma.UserCreateInput): Promise<UserWithRelations> {
     return this.prisma.user.create({
       data,
-      include: this.userInclude, // Create pun harus return wallet
+      include: this.userInclude,
     });
   }
 
@@ -52,7 +68,7 @@ export class UsersRepository {
     return this.prisma.user.update({
       where: { id },
       data,
-      include: this.userInclude, // Update pun harus return wallet
+      include: this.userInclude,
     });
   }
 
@@ -70,44 +86,32 @@ export class UsersRepository {
         take,
         where,
         orderBy,
-        include: this.userInclude, // FindAll juga pakai ini
+        include: this.userInclude,
       }),
       this.prisma.user.count({ where }),
     ]);
   }
 
   async softDelete(id: string): Promise<User> {
-    // Soft delete biasanya tidak butuh return relasi lengkap, cukup User biasa
     return this.prisma.user.update({
       where: { id },
       data: { isActive: false },
     });
   }
 
-  // TAMBAHAN: Helper untuk validasi logic
   async count(where: Prisma.UserWhereInput): Promise<number> {
     return this.prisma.user.count({ where });
   }
 
+  // UPDATE: Samakan include-nya dengan yang lain agar tidak error tipe data,
+  // dan agar halaman frontend UserDetailPage mendapatkan data paymentGatewayTxs
   async findUserProfile(id: string): Promise<UserWithRelations | null> {
-    // Saat ini logicnya sama dengan findById. 
-    // Tapi jika nanti dashboard butuh data extra (misal: 5 transaksi terakhir),
-    // kita cukup ubah 'include' di sini tanpa merusak fitur login lain.
     return this.prisma.user.findUnique({
       where: { id },
-      include: {
-        role: true,
-        communityGroup: {
-          include: {
-            wallet: true,
-            duesRule: true, // Optional: User biasanya butuh tahu aturan iuran RT-nya
-            parent: true,   // Optional: User butuh tahu RW-nya siapa
-          },
-        },
-      },
+      include: this.userInclude, 
     });
   }
-  // Method lebih efisien untuk count single group
+
   async countByGroup(groupId: number): Promise<number> {
     return this.prisma.user.count({
       where: {
@@ -116,5 +120,4 @@ export class UsersRepository {
       },
     });
   }
-
 }

@@ -28,6 +28,7 @@ import { userService } from "@/shared/services/userService";
 import { getRoleLabel } from "@/shared/helpers/roleLabel";
 import { getAvatarUrl } from "@/shared/helpers/avatarUrl";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
+import { DataTable, type ColumnDef } from "@/shared/components/DataTable";
 import type { GroupItem, UserItem, HierarchyData } from "@/shared/types";
 import {
   OrganizationSummaryCards,
@@ -79,7 +80,7 @@ export default function OrganizationPage() {
     return <LeaderView navigate={navigate} />;
   }
   if (userRole === "TREASURER") {
-    return <TreasurerView navigate={navigate} userGroupId={userGroupId} />;
+    return <TreasurerView userGroupId={userGroupId} />;
   }
   if (userRole === "ADMIN") {
     return <AdminView navigate={navigate} userGroupId={userGroupId} />;
@@ -289,7 +290,9 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 // =============================================
 // TREASURER VIEW (Read-only)
 // =============================================
-function TreasurerView({ navigate, userGroupId }: { navigate: ReturnType<typeof useNavigate>; userGroupId: number | null }) {
+function TreasurerView({ userGroupId }: { userGroupId: number | null }) {
+  const navigate = useNavigate();
+  const currentUserId = getUserIdFromStorage();
   const [hierarchy, setHierarchy] = useState<HierarchyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchRT, setSearchRT] = useState("");
@@ -332,13 +335,26 @@ function TreasurerView({ navigate, userGroupId }: { navigate: ReturnType<typeof 
     if (expandedRT === groupId) { setExpandedRT(null); } else { setExpandedRT(groupId); fetchRTMembers(groupId); }
   };
 
+  // 1. Tentukan apakah user yang login ini adalah pengurus Parent (RW) atau bukan.
+  // Jika ID grupnya sama dengan ID RW di hierarki, berarti dia adalah Treasurer RW.
+  const isParentRole = hierarchy?.rw && hierarchy.rw.id === userGroupId;
+
   const filteredRT = (hierarchy?.rtGroups || []).filter((g) => g.name.toLowerCase().includes(searchRT.toLowerCase()));
+
+  // 2. Jika user BUKAN Parent (artinya dia Treasurer RT), urutkan agar RT-nya sendiri berada di paling atas
+  const sortedRTs = isParentRole
+    ? filteredRT
+    : [...filteredRT].sort((a, b) => {
+      if (a.id === userGroupId) return -1;
+      if (b.id === userGroupId) return 1;
+      return 0;
+    });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <OrgHeader subtitle="Lihat struktur organisasi RT/RW." />
       {loading ? <Skeleton className="h-24 w-full rounded-xl" /> : hierarchy?.rw && (
-        <RwInfoCard rw={hierarchy.rw} rtCount={hierarchy.rtGroups.length} />
+        <RwInfoCard rw={hierarchy.rw} rtCount={hierarchy.rtGroups.length} navigate={navigate} clickableOfficers />
       )}
       <div className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -348,22 +364,35 @@ function TreasurerView({ navigate, userGroupId }: { navigate: ReturnType<typeof 
             <Input placeholder="Cari RT..." value={searchRT} onChange={(e) => setSearchRT(e.target.value)} className="pl-9 h-10" />
           </div>
         </div>
-        {loading ? <LoadingSkeletons /> : filteredRT.length === 0 ? <EmptyState text="Belum ada RT" /> : (
+        {loading ? <LoadingSkeletons /> : sortedRTs.length === 0 ? <EmptyState text="Belum ada RT" /> : (
           <div className="space-y-3">
-            {filteredRT.map((rt) => {
+            {sortedRTs.map((rt) => {
+              // 3. Logika isOwn: Jika user BUKAN Parent, dan id grup sama dengan id RT yang sedang di-render
+              const isOwn = !isParentRole && rt.id === userGroupId;
               const isExpanded = expandedRT === rt.id;
               const members = rtMembers[rt.id] || [];
               const isLoadingThisRT = loadingMembers === rt.id;
+              const hasFetchedMembers = rtMembers[rt.id] !== undefined;
+              const realMemberCount = hasFetchedMembers ? members.length : rt.memberCount;
+
+              // 4. Treasurer RW bisa melihat SEMUA data (seakan-akan isOwn true untuk semua)
+              const canViewMembers = isParentRole || isOwn;
+
               return (
                 <Collapsible key={rt.id} open={isExpanded} onOpenChange={() => toggleRT(rt.id)}>
-                  <Card className="overflow-hidden border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                  {/* Styling border berbeda jika itu adalah RT sendiri */}
+                  <Card className={`group overflow-hidden transition-shadow ${isOwn ? "border-slate-100 shadow-sm hover:shadow-md hover:border-primary/40 transition-all duration-400" : "border-slate-100 shadow-sm hover:shadow-md"}`}>
                     <CollapsibleTrigger asChild>
-                      <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50/80 transition-colors">
+                      <div className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${isOwn ? "hover:bg-slate-50/80" : "hover:bg-slate-50/80"}`}>
                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <ChevronDown className={`h-4 w-4 text-slate-400 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"}`} />
+                          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"} ${isOwn ? "text-primary" : "text-slate-400"}`} />
                           <div className="min-w-0">
-                            <p className="font-medium text-slate-900 text-sm sm:text-base">{rt.name}</p>
-                            <p className="text-xs text-slate-500">{rt.memberCount} warga</p>
+                            <div className="flex items-center gap-2">
+                              <p className={`font-medium text-sm sm:text-base ${isOwn ? "text-primary" : "text-slate-900"}`}>{rt.name}</p>
+                              {/* Tampilkan Badge "RT Anda" JIKA isOwn true */}
+                              {isOwn && <Badge variant="default" className="text-[10px] bg-slate-100 text-slate-700 transition-colors group-hover:bg-primary group-hover:text-white">RT Anda</Badge>}
+                            </div>
+                            <p className="text-xs text-slate-500">{realMemberCount} warga</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -375,10 +404,12 @@ function TreasurerView({ navigate, userGroupId }: { navigate: ReturnType<typeof 
                     <CollapsibleContent>
                       <div className="border-t border-slate-100 bg-slate-50/50 p-4 space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <OfficerBadge label="Ketua RT" officer={rt.admin} />
-                          <OfficerBadge label="Bendahara RT" officer={rt.treasurer} />
                         </div>
-                        <ReadOnlyMemberTable members={members} loading={isLoadingThisRT} navigate={navigate} currentUserId={getUserIdFromStorage() || undefined} />
+                        {canViewMembers ? (
+                          <ReadOnlyMemberTable members={members} loading={isLoadingThisRT} navigate={navigate} showDetail currentUserId={currentUserId || undefined} />
+                        ) : (
+                          <p className="text-xs text-slate-400 text-center py-2">Hanya dapat melihat anggota RT Anda sendiri.</p>
+                        )}
                       </div>
                     </CollapsibleContent>
                   </Card>
@@ -452,19 +483,21 @@ function AdminView({ navigate, userGroupId }: { navigate: ReturnType<typeof useN
             const isExpanded = expandedRT === rt.id;
             const members = rtMembers[rt.id] || [];
             const isLoadingThisRT = loadingMembers === rt.id;
+            const hasFetchedMembers = rtMembers[rt.id] !== undefined;
+            const realMemberCount = hasFetchedMembers ? members.length : rt.memberCount;
             return (
               <Collapsible key={rt.id} open={isExpanded} onOpenChange={() => toggleRT(rt.id)}>
-                <Card className={`group overflow-hidden transition-shadow ${isOwn ? "border-primary/40 shadow-md ring-1 ring-primary/20" : "border-slate-100 shadow-sm hover:shadow-md"}`}>
+                <Card className={`group overflow-hidden transition-shadow ${isOwn ? "border-slate-100 shadow-sm hover:shadow-md hover:border-primary/40 transition-all duration-400" : "border-slate-100 shadow-sm hover:shadow-md"}`}>
                   <CollapsibleTrigger asChild>
-                    <div className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${isOwn ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-slate-50/80"}`}>
+                    <div className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${isOwn ? "hover:bg-slate-50/80" : "hover:bg-slate-50/80"}`}>
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"} ${isOwn ? "text-primary" : "text-slate-400"}`} />
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <p className={`font-medium text-sm sm:text-base ${isOwn ? "text-primary" : "text-slate-900"}`}>{rt.name}</p>
-                            {isOwn && <Badge variant="default" className="text-[10px] bg-slate-100 text-slate-700 transition-colors group-hover:bg-primary group-hover:text-white">RT Anda</Badge>}
+                            {isOwn && <Badge variant="default" className="text-[10px] bg-slate-100 text-slate-700 transition-colors duration-400 group-hover:bg-primary group-hover:text-white">RT Anda</Badge>}
                           </div>
-                          <p className="text-xs text-slate-500">{rt.memberCount} warga</p>
+                          <p className="text-xs text-slate-500">{realMemberCount} warga</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -476,8 +509,6 @@ function AdminView({ navigate, userGroupId }: { navigate: ReturnType<typeof useN
                   <CollapsibleContent>
                     <div className="border-t border-slate-100 bg-slate-50/50 p-4 space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <OfficerBadge label="Ketua RT" officer={rt.admin} clickable={isOwn} onClick={() => isOwn && rt.admin && navigate(`/dashboard/users/${rt.admin.id}`)} />
-                        <OfficerBadge label="Bendahara RT" officer={rt.treasurer} clickable={isOwn} onClick={() => isOwn && rt.treasurer && navigate(`/dashboard/users/${rt.treasurer.id}`)} />
                       </div>
                       {isOwn ? (
                         <ReadOnlyMemberTable members={members} loading={isLoadingThisRT} navigate={navigate} showDetail currentUserId={getUserIdFromStorage() || undefined} />
@@ -573,6 +604,8 @@ function ResidentView({ navigate, userGroupId }: { navigate: ReturnType<typeof u
               const isExpanded = expandedRT === rt.id;
               const members = rtMembers[rt.id] || [];
               const isLoadingThisRT = loadingMembers === rt.id;
+              const hasFetchedMembers = rtMembers[rt.id] !== undefined;
+              const realMemberCount = hasFetchedMembers ? members.length : rt.memberCount;
               return (
                 <Collapsible key={rt.id} open={isExpanded} onOpenChange={() => toggleRT(rt.id)}>
                   <Card className={`group overflow-hidden transition-shadow ${isOwn ? "border-slate-100 shadow-sm hover:shadow-md hover:border-primary/40 transition-all duration-400" : "border-slate-100 shadow-sm hover:shadow-md"}`}>
@@ -585,7 +618,7 @@ function ResidentView({ navigate, userGroupId }: { navigate: ReturnType<typeof u
                               <p className={`font-medium text-sm sm:text-base ${isOwn ? "text-primary" : "text-slate-900"}`}>{rt.name}</p>
                               {isOwn && <Badge variant="default" className="text-[10px] bg-slate-100 text-slate-700 transition-colors duration-400 group-hover:bg-primary group-hover:text-white">RT Anda</Badge>}
                             </div>
-                            <p className="text-xs text-slate-500">{rt.memberCount} warga</p>
+                            <p className="text-xs text-slate-500">{realMemberCount} warga</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -596,10 +629,7 @@ function ResidentView({ navigate, userGroupId }: { navigate: ReturnType<typeof u
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <div className="border-t border-slate-100 bg-slate-50/50 p-4 space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <OfficerBadge label="Ketua RT" officer={rt.admin} />
-                          <OfficerBadge label="Bendahara RT" officer={rt.treasurer} />
-                        </div>
+
                         {isOwn ? (
                           <ReadOnlyMemberTable members={members} loading={isLoadingThisRT} navigate={navigate} showDetail currentUserId={currentUserId || undefined} />
                         ) : (
@@ -663,7 +693,7 @@ function RwInfoCard({ rw, rtCount, navigate, clickableOfficers }: {
 }
 
 function OfficerBadge({ label, officer, clickable, onClick }: {
-  
+
   label: string;
   // Tambahkan profileImage ke tipe data officer
   officer: { id: string; fullName: string; email: string; phone?: string | null; profileImage?: string | null } | null;
@@ -672,31 +702,30 @@ function OfficerBadge({ label, officer, clickable, onClick }: {
 }) {
   return (
     <div
-      className={`rounded-lg border border-slate-100 bg-white p-3 flex flex-col ${
-        clickable && officer ? "cursor-pointer hover:border-primary/30 hover:bg-primary/5 transition-colors" : ""
-      }`}
+      className={`rounded-lg border border-slate-100 bg-white p-3 flex flex-col ${clickable && officer ? "cursor-pointer hover:border-primary/30 hover:bg-primary/5 transition-colors" : ""
+        }`}
       onClick={clickable && officer ? onClick : undefined}
     >
       <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium mb-2.5">
         {label}
       </p>
-      
+
       {officer ? (
         <div className="flex items-center gap-3">
           {/* Implementasi Avatar yang sama dengan RtMemberTable */}
           <Avatar className="h-9 w-9 shrink-0 ring-1 ring-slate-100">
             {getAvatarUrl(officer.profileImage) && (
-              <AvatarImage 
-                src={getAvatarUrl(officer.profileImage)!} 
-                alt={officer.fullName} 
-                className="object-cover" 
+              <AvatarImage
+                src={getAvatarUrl(officer.profileImage)!}
+                alt={officer.fullName}
+                className="object-cover"
               />
             )}
             <AvatarFallback className="text-sm font-medium bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600">
               {officer.fullName?.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          
+
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-slate-900 truncate">
               {officer.fullName}
@@ -755,87 +784,81 @@ function ReadOnlyMemberTable({ members, loading, navigate, showDetail, currentUs
     );
   }
 
+  const getRoleBadgeClass = (rt: string) => {
+    if (rt === "LEADER") return "bg-indigo-50 text-indigo-700";
+    if (rt === "ADMIN") return "bg-blue-50 text-blue-700";
+    if (rt === "TREASURER") return "bg-amber-50 text-amber-700";
+    return "bg-slate-50 text-slate-600";
+  };
+
+  const columns: ColumnDef<UserItem>[] = [
+    {
+      key: "name",
+      header: "Nama",
+      render: (m) => {
+        const isSelf = !!(currentUserId && m.id === currentUserId);
+        return (
+          <div className="flex items-center gap-2">
+            <Avatar className={`h-7 w-7 shrink-0 ${isSelf ? "ring-2 ring-primary/30" : ""}`}>
+              {getAvatarUrl(m.profileImage) && (
+                <AvatarImage src={getAvatarUrl(m.profileImage)!} alt={m.fullName} className="object-cover" />
+              )}
+              <AvatarFallback
+                className={`text-xs font-medium ${isSelf
+                  ? "bg-primary/20 text-primary"
+                  : "bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600"
+                  }`}
+              >
+                {m.fullName?.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="font-medium text-slate-700 group-hover:text-slate-900 transition-colors">
+                {m.fullName}
+                {isSelf && (
+                  <span className="ml-1.5 text-[10px] font-semibold bg-brand-green text-white px-1.5 py-0.5 rounded-full">
+                    saya
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "email",
+      header: "Email",
+      hideBelow: "sm",
+      cellClassName: "text-slate-500",
+      render: (m) => m.email,
+    },
+    {
+      key: "role",
+      header: "Role",
+      render: (m) => {
+        const roleType = m.roleType || m.role?.type || "RESIDENT";
+        return (
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeClass(roleType)}`}
+          >
+            {getRoleLabel(roleType)}
+          </span>
+        );
+      },
+    },
+  ];
+
   return (
     <div className="bg-white rounded-lg border border-slate-100 overflow-hidden shadow-sm">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50/50">
-              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider w-10">
-                No
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Nama
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider hidden sm:table-cell">
-                Email
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Role
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {sorted.map((m, idx) => {
-              const isSelf = !!(currentUserId && m.id === currentUserId);
-              const roleType = m.roleType || m.role?.type || "RESIDENT";
-              return (
-                <tr
-                  key={m.id}
-                  onClick={showDetail ? () => navigate(`/dashboard/users/${m.id}`) : undefined}
-                  className={`group hover:bg-slate-50/80 transition-all duration-200 ${showDetail ? "cursor-pointer" : ""}`}
-                >
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
-                    <span className="text-xs text-slate-400 font-mono">
-                      {(idx + 1).toString().padStart(2, "0")}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-left">
-                    <div className="flex items-center gap-2">
-                      <Avatar className={`h-7 w-7 shrink-0 ${isSelf ? 'ring-2 ring-primary/30' : ''}`}>
-                        {getAvatarUrl(m.profileImage) && <AvatarImage src={getAvatarUrl(m.profileImage)!} alt={m.fullName} className="object-cover" />}
-                        <AvatarFallback className={`text-xs font-medium ${isSelf ? 'bg-primary/20 text-primary' : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600'}`}>
-                          {m.fullName?.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
-                        <p className="font-medium text-slate-700 group-hover:text-slate-900 transition-colors">
-                          {m.fullName}
-                          {isSelf && (
-                            <span className="ml-1.5 text-[10px] font-semibold bg-brand-green text-white px-1.5 py-0.5 rounded-full">
-                              saya
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center text-slate-500 hidden sm:table-cell">
-                    {m.email}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
-                    <span
-                      className={`
-                        inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                        ${roleType === "LEADER"
-                          ? "bg-indigo-50 text-indigo-700"
-                          : roleType === "ADMIN"
-                            ? "bg-blue-50 text-blue-700"
-                            : roleType === "TREASURER"
-                              ? "bg-amber-50 text-amber-700"
-                              : "bg-slate-50 text-slate-600"
-                        }
-                      `}
-                    >
-                      {getRoleLabel(roleType)}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={columns}
+        data={sorted}
+        keyExtractor={(m) => m.id}
+        showRowNumber
+        rowNumberPadded
+        onRowClick={showDetail ? (m) => navigate(`/dashboard/users/${m.id}`) : undefined}
+      />
     </div>
   );
 }

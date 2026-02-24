@@ -148,6 +148,7 @@ function App() {
                   <Route path="pembayaran-bendahara/:id" element={<PaymentDetailPage />} />
                   <Route path="transaksi-bendahara/:id" element={<TransactionDetailPage />} />
                   <Route path="keuangan-rt-bendahara/:groupId" element={<GroupFinanceDetailPage />} />
+                  <Route path="progres-iuran-bendahara" element={<GroupDuesProgressPage />} />
                   <Route path="progres-iuran-bendahara/:groupId" element={<GroupDuesProgressPage />} />
                 </Route>
 

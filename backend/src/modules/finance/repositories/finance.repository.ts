@@ -82,8 +82,17 @@ export class FinanceRepository {
       orderBy: { createdAt: 'desc' },
       include: {
         event: { select: { title: true } },
-        createdBy: { select: { fullName: true } }, // Siapa bendaharanya
-        // Jika ada relasi contribution, bisa di-include juga
+        createdBy: { select: { fullName: true } }, // Pembuat manual (Bendahara)
+        
+        // OPSIONAL TAPI SANGAT DIANJURKAN JIKA ADA RELASI KE CONTRIBUTION:
+        // Agar history menampilkan "Iuran Bulan X - Budi"
+        contribution: { 
+          select: { 
+            month: true, 
+            year: true, 
+            user: { select: { fullName: true } } 
+          } 
+        }
       }
     });
   }
