@@ -7,7 +7,7 @@ import {
 } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
 import { Skeleton } from "@/shared/ui/skeleton";
-import { Building2, Users, ChevronRight, UserCircle } from "lucide-react";
+import { Building2, ChevronRight, UserCircle } from "lucide-react";
 import type { ChildWalletInfo } from "@/shared/types";
 
 function formatRupiah(amount: number): string {
