@@ -185,4 +185,41 @@ export class FinanceRepository {
       },
     });
   }
+
+  // ==========================================
+  // 8. PARENT DUES PROGRESS (RW View)
+  // ==========================================
+  async findParentWithChildrenProgress(rwGroupId: number, targetYear: number) {
+    return this.prisma.communityGroup.findUnique({
+      where: { id: rwGroupId },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        children: {
+          orderBy: { name: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            wallet: { select: { balance: true } },
+            // Ambil semua user aktif beserta role dan history iurannya
+            users: {
+              where: { isActive: true },
+              select: {
+                id: true,
+                fullName: true,
+                createdAt: true,
+                lastPaidPeriod: true,
+                role: { select: { type: true } },
+                contributions: {
+                  where: { year: targetYear },
+                  select: { month: true, year: true }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+  }
 }

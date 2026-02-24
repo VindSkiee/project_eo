@@ -507,4 +507,122 @@ export class FinanceService {
       })),
     };
   }
+
+  // ==========================================
+  // PARENT DUES PROGRESS (REKAPITULASI RT UNTUK RW)
+  // ==========================================
+  async getParentDuesProgress(groupId: number, targetYear: number, user: ActiveUserData) {
+    // 1. Ambil data mentah dari database
+    const rwData = await this.financeRepo.findParentWithChildrenProgress(groupId, targetYear);
+    
+    if (!rwData) {
+      throw new NotFoundException('Data lingkungan (RW) tidak ditemukan');
+    }
+
+    if (rwData.type !== 'RW') {
+      throw new BadRequestException('Endpoint ini hanya untuk level RW / Parent Group');
+    }
+
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+
+    // 2. Olah data anak-anak (RT)
+    const childGroupsProgress = rwData.children.map((rt) => {
+      // a. Pisahkan pengurus dan warga biasa
+      const admins = rt.users.filter(u => u.role?.type === 'ADMIN');
+      const treasurers = rt.users.filter(u => u.role?.type === 'TREASURER');
+      const residents = rt.users.filter(u => u.role?.type === 'RESIDENT');
+
+      // Ambil nama pengurus (jika ada lebih dari 1, gabungkan pakai koma)
+      const adminName = admins.length > 0 ? admins.map(a => a.fullName).join(', ') : '-';
+      const treasurerName = treasurers.length > 0 ? treasurers.map(t => t.fullName).join(', ') : '-';
+
+      // b. Kalkulasi status kolektif per bulan (Jan-Des)
+      const monthlyStatus: string[] = [];
+      let isGroupFullyPaid = true; // Asumsi lunas semua, nanti dibuktikan salah jika ada yg nunggak
+
+      // Loop dari Januari (1) sampai Desember (12)
+      for (let month = 1; month <= 12; month++) {
+        // Tentukan apakah bulan ini ada di masa depan
+        const isFuture = targetYear > currentYear || (targetYear === currentYear && month > currentMonth);
+
+        if (isFuture) {
+          monthlyStatus.push('FUTURE');
+          continue; // Skip kalkulasi untuk bulan depan
+        }
+
+        // Cari tahu warga mana saja yang SUDAH TERCATAT aktif di bulan ini
+        const eligibleResidents = residents.filter(r => {
+          if (!r.createdAt) return true;
+          const cDate = new Date(r.createdAt);
+          const cYear = cDate.getFullYear();
+          const cMonth = cDate.getMonth() + 1;
+          // Warga dihitung jika mendaftar SEBELUM ATAU PADA bulan tagihan ini
+          return targetYear > cYear || (targetYear === cYear && month >= cMonth);
+        });
+
+        // Jika bulan ini RT belum punya warga sama sekali
+        if (eligibleResidents.length === 0) {
+          monthlyStatus.push('NOT_REGISTERED');
+          continue;
+        }
+
+        // Hitung berapa warga yang sudah lunas di bulan ini
+        let paidResidentsCount = 0;
+
+        for (const resident of eligibleResidents) {
+          let isPaid = false;
+
+          // Cek array contributions eceran
+          const hasContrib = resident.contributions.some(c => c.month === month && c.year === targetYear);
+          if (hasContrib) {
+            isPaid = true;
+          } else if (resident.lastPaidPeriod) {
+            // Cek tracker akumulasi tunggakan
+            const lp = new Date(resident.lastPaidPeriod);
+            const lpYear = lp.getFullYear();
+            const lpMonth = lp.getMonth() + 1;
+            if (lpYear > targetYear || (lpYear === targetYear && lpMonth >= month)) {
+              isPaid = true;
+            }
+          }
+
+          if (isPaid) {
+            paidResidentsCount++;
+          }
+        }
+
+        // Tentukan Status Kolektif RT untuk bulan ini
+        if (paidResidentsCount === 0) {
+          monthlyStatus.push('UNPAID');     // Merah: Nol besar
+          isGroupFullyPaid = false;
+        } else if (paidResidentsCount === eligibleResidents.length) {
+          monthlyStatus.push('PAID');       // Hijau: Lunas semua warga
+        } else {
+          monthlyStatus.push('PARTIAL');    // Kuning: Sebagian bayar, sebagian belum
+          isGroupFullyPaid = false;
+        }
+      }
+
+      // c. Return object sesuai struktur ParentProgressData di Frontend
+      return {
+        id: rt.id,
+        name: rt.name,
+        adminName,
+        treasurerName,
+        balance: rt.wallet ? Number(rt.wallet.balance) : 0,
+        isFullyPaid: isGroupFullyPaid,
+        monthlyStatus,
+      };
+    });
+
+    // 3. Return final object pembungkus
+    return {
+      group: {
+        name: rwData.name,
+        type: rwData.type,
+      },
+      childGroups: childGroupsProgress,
+    };
+  }
 }

@@ -82,4 +82,13 @@ export const financeService = {
     });
     return response.data.data;
   },
+
+  // 👇 TAMBAHKAN FUNGSI INI 👇
+  /** Get collective dues progress for a parent group (e.g., RW viewing RTs) */
+  getParentDuesProgress: async (groupId: number, year?: number): Promise<any> => {
+    const response = await api.get<ApiResponse<any>>(`/finance/groups/${groupId}/parent-dues-progress`, {
+      params: year ? { year } : {},
+    });
+    return response.data.data;
+  },
 };

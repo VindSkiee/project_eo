@@ -136,6 +136,23 @@ export class FinanceController {
     return this.financeService.getDuesProgress(groupId, targetYear, user);
   }
 
+  
+  // ==========================================
+  // 5c. PARENT DUES PROGRESS (Rekapitulasi RT untuk RW)
+  // ==========================================
+
+  @Roles(SystemRoleType.LEADER, SystemRoleType.TREASURER)
+  @Get('groups/:groupId/parent-dues-progress')
+  @HttpCode(HttpStatus.OK)
+  async getParentDuesProgress(
+    @Param('groupId', ParseIntPipe) groupId: number,
+    @Query('year') year: string,
+    @ActiveUser() user: ActiveUserData,
+  ) {
+    const targetYear = year ? parseInt(year, 10) : new Date().getFullYear();
+    return this.financeService.getParentDuesProgress(groupId, targetYear, user);
+  }
+
   // ==========================================
   // 6. TRANSACTION DETAIL
   // ==========================================
@@ -172,4 +189,6 @@ export class FinanceController {
   ) {
     return this.financeService.getTransparencyHistory(user, scope);
   }
+
+  
 }

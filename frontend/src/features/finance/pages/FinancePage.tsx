@@ -125,10 +125,14 @@ export default function FinancePage() {
   const [events, setEvents] = useState<EventItem[]>([]);
 
   // Role-aware paths
+  // Role-aware paths
   const showDuesConfig = userRole !== "TREASURER";
   const duesConfigPath = userRole === "ADMIN" ? "/dashboard/pengaturan-iuran" : "/dashboard/pengaturan-iuran";
-  const childrenBasePath = userRole === "TREASURER" ? "/dashboard/progres-iuran-bendahara"
-    : userRole === "ADMIN" ? "/dashboard/keuangan-rt" : "/dashboard/keuangan-rt";
+  
+  // === UBAH BAGIAN INI ===
+  // Sekarang Treasurer, Admin, dan Leader akan sama-sama diarahkan ke /dashboard/keuangan-rt
+  const childrenBasePath = "/dashboard/keuangan-rt"; 
+  
   const isChildTreasurer = userRole === "TREASURER" && wallet?.communityGroup?.type === "RT";
   const isRwTreasurer = userRole === "TREASURER" && wallet?.communityGroup?.type === "RW";
   const showChildrenWallets = isRwLevel || isRwTreasurer;

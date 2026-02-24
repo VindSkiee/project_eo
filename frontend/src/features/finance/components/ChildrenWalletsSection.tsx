@@ -132,10 +132,6 @@ export function ChildrenWalletsSection({
 
               {/* Footer Row */}
               <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <Users className="h-3.5 w-3.5" />
-                  <span>{child.memberCount} warga</span>
-                </div>
                 {child.duesRule ? (
                   <Badge variant="default" className="text-[10px]">
                     Iuran {formatRupiah(child.duesRule.amount)}

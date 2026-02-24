@@ -66,7 +66,10 @@ export default function GroupFinanceDetailPage() {
     return null;
   })();
 
-  const backPath = userRole === "LEADER" ? "/dashboard/kas" : "/dashboard/kas-rt";
+  const backPath =
+    userRole === "LEADER"    ? "/dashboard/kas" :
+    userRole === "TREASURER" ? "/dashboard/kas-bendahara" :
+                               "/dashboard/kas-rt";
   const txDetailBasePath =
     userRole === "LEADER"    ? "/dashboard/transaksi" :
     userRole === "ADMIN"     ? "/dashboard/transaksi-rt" :
