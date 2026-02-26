@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   XCircle,
   Info,
+  Smartphone
 } from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
@@ -47,22 +48,18 @@ function formatRupiah(amount: number): string {
 
 /** Check if a member has paid for a specific month safely */
 function isPaidForMonth(member: DuesProgressMember, month: number, year: number): boolean {
-  // 1. Safe check for explicit contributions (Fallback to empty array if undefined)
   const safeContributions = member.contributions || [];
   const hasContribution = safeContributions.some(
     (c) => c.month === month && c.year === year
   );
   if (hasContribution) return true;
 
-  // 2. Fallback check for lastPaidPeriod using robust Year/Month comparison
   if (member.lastPaidPeriod) {
     const lp = new Date(member.lastPaidPeriod);
     const lpYear = lp.getFullYear();
     const lpMonth = lp.getMonth() + 1; // 1-based
 
-    // Jika tahun kalender lebih kecil dari tahun lastPaid, berarti sudah lunas
     if (year < lpYear) return true;
-    // Jika tahunnya sama, pastikan bulan kalender <= bulan lastPaid
     if (year === lpYear && month <= lpMonth) return true;
   }
 
@@ -71,7 +68,7 @@ function isPaidForMonth(member: DuesProgressMember, month: number, year: number)
 
 /** Check if member existed in a given month cleanly via strict Year/Month */
 function memberExistedInMonth(member: DuesProgressMember, month: number, year: number): boolean {
-  if (!member.createdAt) return true; // Safety fallback untuk data lama
+  if (!member.createdAt) return true; 
   
   const created = new Date(member.createdAt);
   const cYear = created.getFullYear();
@@ -82,6 +79,35 @@ function memberExistedInMonth(member: DuesProgressMember, month: number, year: n
   
   return false;
 }
+
+// Logic warna diekstrak agar bisa dipakai ulang di Table (Desktop) dan Card (Mobile)
+function getChildMonthStatus(member: DuesProgressMember, month: number, year: number, currentMonth: number, currentYear: number) {
+  const existed = memberExistedInMonth(member, month, year);
+  const paid = existed && isPaidForMonth(member, month, year);
+  const isCurrent = year === currentYear && month === currentMonth;
+  const isStrictlyFuture = year > currentYear || (year === currentYear && month > currentMonth);
+  const contribution = (member.contributions || []).find((c:any) => c.month === month && c.year === year);
+
+  let bgColor = "bg-slate-200 border border-slate-300/50"; 
+  let tooltipText = `${MONTH_FULL[month - 1]} — Belum terdaftar`;
+
+  if (existed) {
+    if (paid) {
+      bgColor = "bg-emerald-500 shadow-sm ring-1 ring-emerald-600/20";
+      tooltipText = `${MONTH_FULL[month - 1]} — Lunas`;
+      if (contribution) tooltipText += ` (${new Date(contribution.paidAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })})`;
+    } else if (isStrictlyFuture) {
+      bgColor = "bg-slate-100";
+      tooltipText = `${MONTH_FULL[month - 1]} — Belum jatuh tempo`;
+    } else {
+      bgColor = "bg-red-400 shadow-sm ring-1 ring-red-500/20";
+      tooltipText = `${MONTH_FULL[month - 1]} — Menunggak`;
+    }
+  }
+
+  return { bgColor, tooltipText, isCurrent };
+}
+
 
 type FilterMode = "all" | "lunas" | "belum";
 
@@ -130,8 +156,6 @@ export default function GroupDuesProgressPage() {
 
   /** Is the member fully paid for all applicable months up to current */
   const isFullyPaid = useCallback((member: DuesProgressMember): boolean => {
-    // Determine max month to check. If looking at future year, default to checking up to month 12
-    // but future months will be ignored anyway by 'memberExistedInMonth' or skipped logically.
     const maxMonth = selectedYear >= currentYear ? currentMonth : 12;
 
     for (let m = 1; m <= maxMonth; m++) {
@@ -173,8 +197,13 @@ export default function GroupDuesProgressPage() {
   const paidCount = data?.members?.filter((m) => isFullyPaid(m)).length || 0;
   const unpaidCount = totalMembers - paidCount;
 
-  // Year options (last 3 years)
-  const yearOptions = Array.from({ length: 3 }, (_, i) => currentYear - i);
+  // Year options dynamically from group creation or fallback to last 3 years
+  const yearOptions = useMemo(() => {
+    const groupCreatedAt = (data?.group as any)?.createdAt;
+    const startYear = groupCreatedAt ? new Date(groupCreatedAt).getFullYear() : currentYear - 2;
+    const length = Math.max(1, currentYear - startYear + 1);
+    return Array.from({ length }, (_, i) => currentYear - i);
+  }, [data, currentYear]);
 
   return (
     <TooltipProvider>
@@ -195,7 +224,7 @@ export default function GroupDuesProgressPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid gap-3 grid-cols-3">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">Total Warga</CardTitle>
@@ -272,7 +301,7 @@ export default function GroupDuesProgressPage() {
               </SelectContent>
             </Select>
             <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
-              <SelectTrigger className="w-[100px] h-10">
+              <SelectTrigger className="w-[120px] h-10">
                 <Calendar className="h-4 w-4 mr-1.5 text-slate-400" />
                 <SelectValue />
               </SelectTrigger>
@@ -285,12 +314,12 @@ export default function GroupDuesProgressPage() {
           </div>
         </div>
 
-        {/* Progress Table */}
+        {/* Progress Display */}
         {loading ? (
           <Card>
             <CardContent className="py-6 space-y-3">
               {[1, 2, 3, 4, 5].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
+                <Skeleton key={i} className="h-20 lg:h-12 w-full rounded-xl" />
               ))}
             </CardContent>
           </Card>
@@ -304,8 +333,10 @@ export default function GroupDuesProgressPage() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
+          <Card className="overflow-hidden bg-slate-50/50 lg:bg-white border-0 ring-1 ring-slate-200">
+            
+            {/* --- DESKTOP VIEW (TABLE) --- */}
+            <div className="overflow-x-auto hidden lg:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-white">
@@ -320,7 +351,6 @@ export default function GroupDuesProgressPage() {
                   {/* Month headers */}
                   <tr className="border-b border-slate-100 bg-slate-50/50">
                     <th colSpan={3} className="hidden sm:table-cell" />
-                    <th colSpan={2} className="sm:hidden" />
                     {MONTH_NAMES.map((name, idx) => {
                       const monthNum = idx + 1;
                       const isCurrent = selectedYear === currentYear && monthNum === currentMonth;
@@ -341,7 +371,7 @@ export default function GroupDuesProgressPage() {
                     <th />
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="bg-white">
                   {filteredMembers.map((member, idx) => (
                     <MemberRow
                       key={member.id}
@@ -356,24 +386,40 @@ export default function GroupDuesProgressPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* --- MOBILE VIEW (CARDS) --- */}
+            <div className="grid grid-cols-1 gap-3 p-3 lg:hidden">
+              {filteredMembers.map((member) => (
+                <ChildMobileCard 
+                  key={member.id} 
+                  member={member} 
+                  year={selectedYear} 
+                  currentMonth={currentMonth} 
+                  currentYear={currentYear} 
+                  isFullyPaid={isFullyPaid(member)} 
+                />
+              ))}
+            </div>
+
           </Card>
         )}
 
         {/* Legend */}
-        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-100">
+          <span className="text-slate-700 mr-2"><Info className="h-4 w-4 inline mr-1" /> Keterangan:</span>
           <div className="flex items-center gap-1.5">
-            <div className="w-4 h-4 rounded bg-emerald-500" />
+            <div className="w-4 h-4 rounded bg-emerald-500 shadow-inner" />
             <span>Lunas</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-4 h-4 rounded bg-red-400" />
+            <div className="w-4 h-4 rounded bg-red-400 shadow-inner" />
             <span>Belum Bayar</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-4 h-4 rounded bg-slate-200" />
+            <div className="w-4 h-4 rounded bg-slate-200 shadow-inner" />
             <span>Belum Terdaftar</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 ml-auto sm:ml-4">
             <div className="w-4 h-1 rounded-full bg-primary" />
             <span>Bulan Ini</span>
           </div>
@@ -383,7 +429,7 @@ export default function GroupDuesProgressPage() {
   );
 }
 
-// === MEMBER ROW COMPONENT ===
+// === DESKTOP ROW COMPONENT ===
 
 function MemberRow({
   member,
@@ -401,53 +447,23 @@ function MemberRow({
   isFullyPaid: boolean;
 }) {
   return (
-    <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-      <td className="text-center py-3 px-4 text-slate-400 text-xs">{index}</td>
-      <td className="py-3 px-4 text-center flex items-center justify-center">
+    <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors group">
+      <td className="text-center py-4 px-4 text-slate-400 text-xs">{index}</td>
+      <td className="py-4 px-4 flex items-center justify-center">
         <div className="min-w-0">
-          <p className="font-medium text-slate-900 text-sm truncate">{member.fullName}</p>
-          <p className="text-xs text-slate-400 sm:hidden">{member.phone || "—"}</p>
+          <p className="font-semibold text-slate-900 text-sm truncate">{member.fullName}</p>
         </div>
       </td>
-      <td className="text-center py-3 px-4 text-slate-600 hidden sm:table-cell">
+      <td className="text-center py-4 px-4 text-slate-500 text-xs hidden sm:table-cell">
         {member.phone || "—"}
       </td>
       
       {/* 12 Month blocks */}
       {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
-        const existed = memberExistedInMonth(member, month, year);
-        const paid = existed && isPaidForMonth(member, month, year);
-        const isCurrent = year === currentYear && month === currentMonth;
-        
-        // Cek aman untuk list contribution manual dari backend
-        const safeContributions = member.contributions || [];
-        const contribution = safeContributions.find(
-          (c) => c.month === month && c.year === year
-        );
-
-        let bgColor = "bg-slate-200"; // Default: Belum terdaftar
-        let tooltipText = `${MONTH_FULL[month - 1]} — Belum terdaftar`;
-
-        const isStrictlyFuture = year > currentYear || (year === currentYear && month > currentMonth);
-
-        if (existed) {
-          if (paid) {
-            bgColor = "bg-emerald-500";
-            tooltipText = `${MONTH_FULL[month - 1]} — Lunas`;
-            if (contribution) {
-              tooltipText += ` (${new Date(contribution.paidAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })})`;
-            }
-          } else if (isStrictlyFuture) {
-            bgColor = "bg-slate-300/50";
-            tooltipText = `${MONTH_FULL[month - 1]} — Belum jatuh tempo`;
-          } else {
-            bgColor = "bg-red-400";
-            tooltipText = `${MONTH_FULL[month - 1]} — Belum bayar`;
-          }
-        }
+        const { bgColor, tooltipText, isCurrent } = getChildMonthStatus(member, month, year, currentMonth, currentYear);
 
         return (
-          <td key={month} className="py-3 px-0.5 text-center">
+          <td key={month} className="py-4 px-0.5 text-center">
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
@@ -467,7 +483,7 @@ function MemberRow({
       })}
       
       {/* Status badge */}
-      <td className="py-3 px-4 text-center">
+      <td className="py-4 px-4 text-center">
         <Badge
           variant={fullyPaid ? "default" : "destructive"}
           className={`text-[10px] sm:text-xs ${fullyPaid ? "bg-emerald-500 hover:bg-emerald-600" : ""}`}
@@ -476,5 +492,42 @@ function MemberRow({
         </Badge>
       </td>
     </tr>
+  );
+}
+
+// === MOBILE CARD COMPONENT ===
+
+function ChildMobileCard({ member, year, currentMonth, currentYear, isFullyPaid }: any) {
+  return (
+    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3">
+      <div className="flex justify-between items-start gap-2">
+        <div>
+          <h4 className="font-bold text-slate-900 text-sm">{member.fullName}</h4>
+          <span className="flex items-center gap-1 mt-1 text-xs text-slate-500">
+            <Smartphone className="h-3 w-3" /> {member.phone || "Tidak ada No. HP"}
+          </span>
+        </div>
+        <Badge variant={isFullyPaid ? "default" : "destructive"} className={`text-[10px] shrink-0 ${isFullyPaid ? "bg-emerald-500" : ""}`}>
+          {isFullyPaid ? "Lunas" : "Tunggakan"}
+        </Badge>
+      </div>
+
+      <div className="pt-3 border-t border-slate-100">
+        <p className="text-[10px] font-semibold text-slate-400 mb-2 uppercase tracking-wider">Status Iuran {year}</p>
+        <div className="grid grid-cols-6 gap-y-3 gap-x-1">
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
+            const { bgColor, isCurrent } = getChildMonthStatus(member, month, year, currentMonth, currentYear);
+            return (
+              <div key={month} className="flex flex-col items-center gap-1.5">
+                <span className={`text-[9px] font-medium ${isCurrent ? "text-primary font-bold" : "text-slate-500"}`}>
+                  {MONTH_NAMES[month - 1]}
+                </span>
+                <div className={`w-full max-w-[20px] h-5 rounded ${bgColor} ${isCurrent ? "ring-2 ring-primary ring-offset-1" : ""}`} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }

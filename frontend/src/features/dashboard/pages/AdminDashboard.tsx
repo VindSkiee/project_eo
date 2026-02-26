@@ -80,7 +80,7 @@ export default function AdminDashboard() {
   }, []);
 
   const activeEvents = events.filter(
-    (e) => e.status === "APPROVED" || e.status === "IN_PROGRESS"
+    (e) => e.status === "APPROVED" || e.status === "ONGOING"
   );
   const pendingFR = fundRequests.filter((f) => f.status === "PENDING");
 

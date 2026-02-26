@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom"; // <-- TAMBAHKAN useNavigate DI SINI
+import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
-import { Button } from "@/shared/ui/button"; // <-- TAMBAHKAN Button DI SINI
+import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Input } from "@/shared/ui/input";
 import {
@@ -20,7 +20,7 @@ import {
   Info,
   Building2,
   ListFilter,
-  ArrowLeft // <-- TAMBAHKAN ArrowLeft DI SINI
+  ArrowLeft
 } from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
@@ -36,7 +36,7 @@ import {
 import type { GroupProgressSummary } from "@/features/payment/components/DuesProgressTable";
 
 interface ParentProgressData {
-  group: { name: string; type: string };
+  group: { name: string; type: string; createdAt?: string };
   childGroups: GroupProgressSummary[];
 }
 
@@ -44,7 +44,7 @@ type FilterMode = "all" | "lunas" | "belum";
 
 export default function PaymentPage() {
   const { groupId: paramGroupId } = useParams<{ groupId?: string }>();
-  const navigate = useNavigate(); // <-- INISIALISASI useNavigate
+  const navigate = useNavigate();
   
   // States
   const [childData, setChildData] = useState<DuesProgressData | null>(null);
@@ -79,7 +79,6 @@ export default function PaymentPage() {
     return null;
   }, [paramGroupId]);
 
-
   // 2. EFFECT FETCH DATA PINTAR
   useEffect(() => {
     if (resolvedGroupId) fetchData();
@@ -110,6 +109,18 @@ export default function PaymentPage() {
       setLoading(false);
     }
   };
+
+  // === DYNAMIC YEAR LOGIC ===
+  const yearOptions = useMemo(() => {
+    const groupCreatedAt = isParentLevel ? (parentData?.group as any)?.createdAt : (childData?.group as any)?.createdAt;
+    const startYear = groupCreatedAt ? new Date(groupCreatedAt).getFullYear() : currentYear;
+    
+    // Pastikan tidak ada array panjang negatif jika sistem backend mengembalikan tanggal masa depan secara keliru
+    const length = Math.max(1, currentYear - startYear + 1);
+    
+    return Array.from({ length }, (_, i) => currentYear - i);
+  }, [parentData, childData, currentYear, isParentLevel]);
+
 
   // === FILTERING LOGIC (CHILD/RT LEVEL) ===
   const isFullyPaidChild = useCallback((member: DuesProgressMember): boolean => {
@@ -173,7 +184,6 @@ export default function PaymentPage() {
     ? (parentData?.childGroups?.filter(g => g.isFullyPaid).length || 0)
     : (childData?.members?.filter(m => isFullyPaidChild(m)).length || 0);
   const unpaidCount = totalItems - paidCount;
-  const yearOptions = Array.from({ length: 3 }, (_, i) => currentYear - i);
   
   // --- TENTUKAN BACK PATH UNTUK TOMBOL KEMBALI ---
   const handleBack = () => {
@@ -275,8 +285,9 @@ export default function PaymentPage() {
             <span className="text-xs font-medium text-slate-500">Filter:</span>
           </div>
 
+          {/* === DIPERBESAR: w-[140px] === */}
           <Select value={filter} onValueChange={(v) => setFilter(v as FilterMode)}>
-            <SelectTrigger className="w-[130px] h-10">
+            <SelectTrigger className="w-[145px] h-10">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -294,8 +305,9 @@ export default function PaymentPage() {
             />
           )}
 
+          {/* === DIPERBESAR: w-[120px] === */}
           <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
-            <SelectTrigger className="w-[100px] h-10 bg-slate-50 border-slate-200">
+            <SelectTrigger className="w-[120px] h-10 bg-slate-50 border-slate-200">
               <Calendar className="h-4 w-4 mr-1 text-slate-500" />
               <SelectValue />
             </SelectTrigger>
