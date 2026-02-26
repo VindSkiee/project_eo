@@ -21,7 +21,38 @@ interface CommitteeListProps {
 }
 
 export function CommitteeList({ event, currentUserId }: CommitteeListProps) {
+  // Ambil hanya partisipan dengan role COMMITTEE
   const committeeMembers = event.participants?.filter((p) => p.role === "COMMITTEE") || [];
+
+  // === FUNGSI PENGURUTAN PRIORITAS ===
+  const sortedCommittee = [...committeeMembers].sort((a, b) => {
+    const getPriority = (participant: any) => {
+      // Prioritas 1: Pembuat Acara (Creator)
+      if (participant.userId === event.createdById) return 1;
+      
+      // Prioritas 2: Bendahara (Treasurer)
+      const systemRole = participant.user?.roleType || participant.user?.role?.type || "RESIDENT";
+      if (systemRole === "TREASURER") return 2;
+      
+      // Prioritas 3: Diri Sendiri (Current User)
+      if (currentUserId && (participant.userId === currentUserId || participant.user?.id === currentUserId)) return 3;
+      
+      // Prioritas 4: Residen Lainnya
+      return 4;
+    };
+
+    const priorityA = getPriority(a);
+    const priorityB = getPriority(b);
+
+    // Jika prioritasnya sama, urutkan berdasarkan nama sesuai abjad
+    if (priorityA === priorityB) {
+      const nameA = a.user?.fullName || "";
+      const nameB = b.user?.fullName || "";
+      return nameA.localeCompare(nameB);
+    }
+
+    return priorityA - priorityB;
+  });
 
   return (
     <Card className="border-slate-200 shadow-sm flex flex-col h-full max-h-[500px]">
@@ -30,23 +61,26 @@ export function CommitteeList({ event, currentUserId }: CommitteeListProps) {
           <div className="p-1.5 rounded-md bg-primary/10">
             <Users className="h-4 w-4 text-primary" />
           </div>
-          Susunan Panitia ({committeeMembers.length})
+          Susunan Panitia ({sortedCommittee.length})
         </CardTitle>
       </CardHeader>
       
       <CardContent className="pt-4 overflow-y-auto flex-1">
-        {committeeMembers.length === 0 ? (
+        {sortedCommittee.length === 0 ? (
           <div className="text-center py-6">
             <p className="text-sm text-slate-500 font-medium">Belum ada panitia terdaftar.</p>
             <p className="text-xs text-slate-400 mt-1">Tambahkan warga untuk menjadi panitia acara ini.</p>
           </div>
         ) : (
           <div className="space-y-2.5">
-            {committeeMembers.map((participant, idx) => {
+            {sortedCommittee.map((participant, idx) => {
               const systemRole = participant.user?.roleType || participant.user?.role?.type || "RESIDENT";
               const groupName = participant.user?.communityGroup?.name;
               
               const isSelf = !!(currentUserId && (participant.userId === currentUserId || participant.user?.id === currentUserId));
+              
+              // Cek apakah user ini adalah pembuat event
+              const isCreator = participant.userId === event.createdById;
 
               return (
                 <div
@@ -72,8 +106,14 @@ export function CommitteeList({ event, currentUserId }: CommitteeListProps) {
                           {participant.user?.fullName}
                         </p>
                         
-                        {/* === BADGE "SAYA" YANG SUDAH DISERAGAMKAN === */}
-                        {isSelf && (
+                        {/* === BADGE IDENTITAS === */}
+                        {isCreator && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-medium bg-blue-50 text-blue-700 border-blue-200 shrink-0">
+                            Pembuat Acara
+                          </Badge>
+                        )}
+                        
+                        {isSelf && !isCreator && (
                           <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-medium bg-emerald-50 text-emerald-700 border-emerald-200 shrink-0">
                             Saya
                           </Badge>

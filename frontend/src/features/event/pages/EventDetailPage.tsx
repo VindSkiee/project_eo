@@ -29,6 +29,7 @@ import {
   Banknote,
   ClipboardCheck,
   AlertCircle,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { eventService } from "@/features/event/services/eventService";
@@ -283,13 +284,20 @@ export default function EventDetailPage() {
   // Aksi Khusus APPROVER & TREASURER (Bukan berdasarkan Creator)
   // -----------------------------------------------------------------------
 
-  // Only the assigned TREASURER/LEADER can approve/reject SUBMITTED/UNDER_REVIEW events
-  const isAssignedApprover = !!(
-    event?.approvals?.some(
-      (a) => a.approverId === user?.id && a.status === "PENDING"
-    )
-  );
+  // Cari siapa yang sedang mendapat giliran review saat ini (Pencarian tahap PERTAMA yang PENDING)
+  const currentPendingApproval = event?.approvals?.find((a) => a.status === "PENDING");
+  
+  // Cek apakah giliran saat ini adalah milik user yang sedang login
+  const isAssignedApprover = !!(currentPendingApproval?.approverId === user?.id);
+  
   const canApprove = ["SUBMITTED", "UNDER_REVIEW"].includes(status) && ["TREASURER", "LEADER"].includes(role) && isAssignedApprover;
+
+  // Cek apakah user ini adalah Leader, acara sedang diajukan, TAPI belum gilirannya (Masih nunggu Bendahara)
+  const isLeaderWaitingForTreasurer = 
+    role === "LEADER" && 
+    ["SUBMITTED", "UNDER_REVIEW"].includes(status) && 
+    currentPendingApproval && 
+    currentPendingApproval.approverId !== user?.id;
 
   // Treasurer submits expense report at FUNDED → ONGOING (same group only)
   const isSameGroup = event?.communityGroupId === user?.communityGroupId;
@@ -361,6 +369,40 @@ export default function EventDetailPage() {
       {/* Event Header */}
       <EventHeader event={event} currentUserId={user?.id} />
 
+      {/* === INFO MENUNGGU PERSETUJUAN (Khusus Pembuat Acara) === */}
+      {isCreator && ["SUBMITTED", "UNDER_REVIEW"].includes(status) && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-50 border border-blue-100 shadow-sm animate-in fade-in slide-in-from-bottom-2">
+          <div className="p-2 bg-blue-100/50 rounded-lg shrink-0">
+            <Clock className="h-5 w-5 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-blue-900 font-poppins">
+              Menunggu Persetujuan
+            </h3>
+            <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+              Pengajuan kegiatan ini telah terkirim dan sedang menunggu proses *review* serta persetujuan dari Ketua atau Bendahara. Anda akan mendapatkan pembaruan setelah aksi dilakukan.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* === INFO GILIRAN PERSETUJUAN (Khusus Leader) === */}
+      {isLeaderWaitingForTreasurer && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-100 shadow-sm animate-in fade-in slide-in-from-bottom-2">
+          <div className="p-2 bg-amber-100/50 rounded-lg shrink-0">
+            <Clock className="h-5 w-5 text-amber-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-amber-900 font-poppins">
+              Menunggu Review Tahap 1
+            </h3>
+            <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+              Pengajuan ini memerlukan persetujuan berjenjang. Saat ini sedang dalam antrean review oleh <strong>{currentPendingApproval?.roleSnapshot || "Bendahara"}</strong>. Tombol persetujuan Anda akan otomatis terbuka setelah tahap pertama diselesaikan.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Description */}
       <Card>
         <CardHeader className="pb-3">
@@ -412,11 +454,13 @@ export default function EventDetailPage() {
 
               <Separator orientation="vertical" className="h-8 hidden sm:block" />
 
-              {/* Approval actions (Treasurer only) */}
+              {/* Approval actions (Treasurer / Leader) */}
               {canApprove && (
                 <>
                   <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setShowApprovalDialog("approve")}>
-                    <CheckCircle2 className="h-4 w-4 mr-1" /> Setujui & Cairkan Dana
+                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                    {/* === UBAH TEKS BERDASARKAN ROLE === */}
+                    {role === "TREASURER" ? "Setujui & Cairkan Dana" : "Setujui Acara"}
                   </Button>
                   <Button size="sm" variant="destructive" onClick={() => setShowApprovalDialog("reject")}>
                     <XOctagon className="h-4 w-4 mr-1" /> Tolak

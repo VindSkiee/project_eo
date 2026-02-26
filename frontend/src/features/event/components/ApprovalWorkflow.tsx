@@ -53,11 +53,11 @@ export function ApprovalWorkflow({ event }: ApprovalWorkflowProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Langkah</TableHead>
-                <TableHead>Peran</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Penyetuju</TableHead>
-                <TableHead>Catatan</TableHead>
+                <TableHead className="text-center">Langkah</TableHead>
+                <TableHead className="text-center">Peran</TableHead>
+                <TableHead className="text-center">Status</TableHead>
+                <TableHead className="text-center">Penyetuju</TableHead>
+                <TableHead className="text-center">Catatan</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -65,14 +65,14 @@ export function ApprovalWorkflow({ event }: ApprovalWorkflowProps) {
                 .sort((a, b) => a.stepOrder - b.stepOrder)
                 .map((approval) => (
                   <TableRow key={approval.id}>
-                    <TableCell className="font-medium">{approval.stepOrder}</TableCell>
-                    <TableCell>{approval.roleSnapshot}</TableCell>
-                    <TableCell>
+                    <TableCell className="font-medium text-center">{approval.stepOrder}</TableCell>
+                    <TableCell className="text-center">{approval.roleSnapshot}</TableCell>
+                    <TableCell className="text-center">
                       <Badge variant={approvalStatusVariant(approval.status)}>
                         {approvalStatusLabel(approval.status)}
                       </Badge>
                     </TableCell>
-                    <TableCell>{approval.approver?.fullName || "-"}</TableCell>
+                    <TableCell className="text-center">{approval.approver?.fullName || "-"}</TableCell>
                     <TableCell className="max-w-xs truncate">
                       {approval.notes || "-"}
                     </TableCell>

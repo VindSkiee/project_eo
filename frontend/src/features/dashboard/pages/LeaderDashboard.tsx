@@ -35,7 +35,7 @@ export default function LeaderDashboard() {
         const [walletRes, eventsRes, groupsRes, usersRes, fundRequestsRes] =
           await Promise.allSettled([
             financeService.getWalletDetails(),
-             eventService.getAll(),
+            eventService.getAll(),
             groupService.getAll(),
             userService.getAll(),
             fundRequestService.getAll(),
@@ -66,17 +66,24 @@ export default function LeaderDashboard() {
   }, []);
 
   // Derived data
-  const pendingEvents = events.filter((e) => e.status === "PENDING_APPROVAL");
-  const activeEvents = events.filter((e) => e.status === "APPROVED" || e.status === "IN_PROGRESS");
-  const pendingFundRequests = fundRequests.filter((f) => f.status === "PENDING");
+  const activeEvents = events.filter(
+    (e) => e.status === "APPROVED" || e.status === "ONGOING"
+  );
   const rtGroups = groups.filter((g) => g.type === "RT");
+
+  // ActionRequired — leader perlu approve event SUBMITTED dan fund requests PENDING
+  const eventsNeedingReview = events.filter((e) => e.status === "SUBMITTED");
+  const pendingFundRequests = fundRequests.filter((f) => f.status === "PENDING");
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500">
       {/* Header */}
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold font-poppins text-slate-900 tracking-tight">
-          Dashboard <span className="text-brand-green">{wallet?.communityGroup?.name || "—"}</span>
+          Dashboard{" "}
+          <span className="text-brand-green">
+            {wallet?.communityGroup?.name || "—"}
+          </span>
         </h1>
         <p className="text-sm sm:text-base text-slate-500 mt-1">
           Ringkasan data dan statistik seluruh warga.
@@ -92,13 +99,19 @@ export default function LeaderDashboard() {
       />
 
       <ActionRequired
-        pendingEvents={pendingEvents}
+        eventsNeedingReview={eventsNeedingReview}
+        eventsFunded={[]}
+        eventsUnderReview={[]}
         pendingFundRequests={pendingFundRequests}
         loading={loading}
       />
 
       <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
-        <RecentEventsCard events={events} loading={loading} viewAllLink="/dashboard/kegiatan" />
+        <RecentEventsCard
+          events={events}
+          loading={loading}
+          viewAllLink="/dashboard/kegiatan"
+        />
         <RecentFundRequests fundRequests={fundRequests} loading={loading} />
       </div>
 

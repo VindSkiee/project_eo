@@ -164,6 +164,121 @@ STORAGE_PATH=./uploads
    npx prisma db seed
    ```
 
+---
+
+## 🔑 Seed Accounts
+
+Semua akun menggunakan password default: **`123456`**
+
+### 🏘️ RW 01 — Pengurus
+
+| Nama Lengkap | Email | Role | Grup |
+|---|---|---|---|
+| Budi Santoso | `ketua.rw01@warga.id` | LEADER | RW 01 |
+| Siti Rahayu | `bendahara.rw01@warga.id` | TREASURER | RW 01 |
+
+---
+
+### 🏠 RT 01
+
+| Nama Lengkap | Email | Role |
+|---|---|---|
+| Ahmad Fauzi | `ketua.rt01@warga.id` | ADMIN |
+| Dewi Lestari | `bendahara.rt01@warga.id` | TREASURER |
+| Andi Wijaya | `warga.rt01.01@warga.id` | RESIDENT |
+| Bambang Supriyadi | `warga.rt01.02@warga.id` | RESIDENT |
+| Candra Kusuma | `warga.rt01.03@warga.id` | RESIDENT |
+| Dian Permata | `warga.rt01.04@warga.id` | RESIDENT |
+| Eko Prasetyo | `warga.rt01.05@warga.id` | RESIDENT |
+| Fitri Handayani | `warga.rt01.06@warga.id` | RESIDENT |
+| Galih Nugroho | `warga.rt01.07@warga.id` | RESIDENT |
+| Heni Susanti | `warga.rt01.08@warga.id` | RESIDENT |
+| Irwan Syahputra | `warga.rt01.09@warga.id` | RESIDENT |
+| Joko Purnomo | `warga.rt01.10@warga.id` | RESIDENT |
+
+### 🏠 RT 02
+
+| Nama Lengkap | Email | Role |
+|---|---|---|
+| Kurniawan Hadi | `ketua.rt02@warga.id` | ADMIN |
+| Lilis Suryani | `bendahara.rt02@warga.id` | TREASURER |
+| Mulyadi Suharto | `warga.rt02.01@warga.id` | RESIDENT |
+| Nina Kartika | `warga.rt02.02@warga.id` | RESIDENT |
+| Oki Firmansyah | `warga.rt02.03@warga.id` | RESIDENT |
+| Putri Rahmawati | `warga.rt02.04@warga.id` | RESIDENT |
+| Qori Abdillah | `warga.rt02.05@warga.id` | RESIDENT |
+| Rini Wahyuni | `warga.rt02.06@warga.id` | RESIDENT |
+| Surya Darma | `warga.rt02.07@warga.id` | RESIDENT |
+| Teti Marlina | `warga.rt02.08@warga.id` | RESIDENT |
+| Umar Bakri | `warga.rt02.09@warga.id` | RESIDENT |
+| Vera Listiani | `warga.rt02.10@warga.id` | RESIDENT |
+
+### 🏠 RT 03
+
+| Nama Lengkap | Email | Role |
+|---|---|---|
+| Wahyu Saputra | `ketua.rt03@warga.id` | ADMIN |
+| Yuni Pratiwi | `bendahara.rt03@warga.id` | TREASURER |
+| Zainal Abidin | `warga.rt03.01@warga.id` | RESIDENT |
+| Agus Salim | `warga.rt03.02@warga.id` | RESIDENT |
+| Basuki Rahmat | `warga.rt03.03@warga.id` | RESIDENT |
+| Cahyo Wibowo | `warga.rt03.04@warga.id` | RESIDENT |
+| Dodi Kuswara | `warga.rt03.05@warga.id` | RESIDENT |
+| Endah Purwaningrum | `warga.rt03.06@warga.id` | RESIDENT |
+| Fajar Sidiq | `warga.rt03.07@warga.id` | RESIDENT |
+| Gita Puspita | `warga.rt03.08@warga.id` | RESIDENT |
+| Hamid Abdullah | `warga.rt03.09@warga.id` | RESIDENT |
+| Ida Ayu Ketut | `warga.rt03.10@warga.id` | RESIDENT |
+
+### 🏠 RT 04
+
+| Nama Lengkap | Email | Role |
+|---|---|---|
+| Jefri Utama | `ketua.rt04@warga.id` | ADMIN |
+| Kiki Amalia | `bendahara.rt04@warga.id` | TREASURER |
+| Leo Pradipta | `warga.rt04.01@warga.id` | RESIDENT |
+| Maya Sari | `warga.rt04.02@warga.id` | RESIDENT |
+| Nandi Wijoseno | `warga.rt04.03@warga.id` | RESIDENT |
+| Olga Putri | `warga.rt04.04@warga.id` | RESIDENT |
+| Pandu Aditya | `warga.rt04.05@warga.id` | RESIDENT |
+| Rudi Hermawan | `warga.rt04.06@warga.id` | RESIDENT |
+| Sari Wulandari | `warga.rt04.07@warga.id` | RESIDENT |
+| Tino Supriatna | `warga.rt04.08@warga.id` | RESIDENT |
+| Umi Kulsum | `warga.rt04.09@warga.id` | RESIDENT |
+| Vandra Kusuma | `warga.rt04.10@warga.id` | RESIDENT |
+
+### 🏠 RT 05
+
+| Nama Lengkap | Email | Role |
+|---|---|---|
+| Vino Valentino | `ketua.rt05@warga.id` | ADMIN |
+| Wida Hendrawati | `bendahara.rt05@warga.id` | TREASURER |
+| Yudi Setiawan | `warga.rt05.01@warga.id` | RESIDENT |
+| Zara Amelia | `warga.rt05.02@warga.id` | RESIDENT |
+| Angga Trisnawan | `warga.rt05.03@warga.id` | RESIDENT |
+| Bunga Citra | `warga.rt05.04@warga.id` | RESIDENT |
+| Cici Paramida | `warga.rt05.05@warga.id` | RESIDENT |
+| Deden Supriadi | `warga.rt05.06@warga.id` | RESIDENT |
+| Erni Susanto | `warga.rt05.07@warga.id` | RESIDENT |
+| Farhan Ramadhan | `warga.rt05.08@warga.id` | RESIDENT |
+| Gilang Pratama | `warga.rt05.09@warga.id` | RESIDENT |
+| Hana Salsabila | `warga.rt05.10@warga.id` | RESIDENT |
+
+---
+
+### 💰 Saldo Wallet Awal
+
+| Grup | Saldo |
+|---|---|
+| RW 01 | Rp 20.000.000 |
+| RT 01 | Rp 10.000.000 |
+| RT 02 | Rp 10.000.000 |
+| RT 03 | Rp 10.000.000 |
+| RT 04 | Rp 10.000.000 |
+| RT 05 | Rp 10.000.000 |
+
+> **Total akun**: 62 (2 pengurus RW + 5×12 pengguna RT)
+
 ### Running the Application
 
 ```bash

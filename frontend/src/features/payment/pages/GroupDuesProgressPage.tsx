@@ -308,10 +308,10 @@ export default function GroupDuesProgressPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/80">
-                    <th className="text-left py-3 px-4 font-semibold text-slate-600 w-10">#</th>
-                    <th className="text-left py-3 px-4 font-semibold text-slate-600 min-w-[140px]">Nama</th>
-                    <th className="text-left py-3 px-4 font-semibold text-slate-600 hidden sm:table-cell min-w-[120px]">No. HP</th>
+                  <tr className="border-b border-slate-100 bg-white">
+                    <th className="text-center py-3 px-4 font-semibold text-slate-600 w-10">No</th>
+                    <th className="text-center py-3 px-4 font-semibold text-slate-600 min-w-[140px]">Nama</th>
+                    <th className="text-center py-3 px-4 font-semibold text-slate-600 hidden sm:table-cell min-w-[120px]">No. HP</th>
                     <th className="text-center py-3 px-2 font-semibold text-slate-600" colSpan={12}>
                       Progres Bulanan {selectedYear}
                     </th>
@@ -402,14 +402,14 @@ function MemberRow({
 }) {
   return (
     <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-      <td className="py-3 px-4 text-slate-400 text-xs">{index}</td>
-      <td className="py-3 px-4">
+      <td className="text-center py-3 px-4 text-slate-400 text-xs">{index}</td>
+      <td className="py-3 px-4 text-center flex items-center justify-center">
         <div className="min-w-0">
           <p className="font-medium text-slate-900 text-sm truncate">{member.fullName}</p>
           <p className="text-xs text-slate-400 sm:hidden">{member.phone || "—"}</p>
         </div>
       </td>
-      <td className="py-3 px-4 text-slate-600 hidden sm:table-cell">
+      <td className="text-center py-3 px-4 text-slate-600 hidden sm:table-cell">
         {member.phone || "—"}
       </td>
       

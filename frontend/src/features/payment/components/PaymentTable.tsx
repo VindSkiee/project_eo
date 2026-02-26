@@ -1,4 +1,4 @@
-import { Card, CardContent } from "@/shared/ui/card";
+import { Card } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { DataTable, type ColumnDef } from "@/shared/components/DataTable";

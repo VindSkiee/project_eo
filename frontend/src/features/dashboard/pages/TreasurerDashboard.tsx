@@ -11,9 +11,6 @@ import {
   CalendarDays,
   ArrowRight,
   CreditCard,
-  AlertTriangle,
-  Receipt,
-  Banknote,
 } from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
@@ -22,6 +19,7 @@ import { eventService } from "@/features/event/services/eventService";
 import {
   RecentTransactions,
   RecentEventsCard,
+  ActionRequired,
 } from "@/features/dashboard/components";
 import type {
   WalletDetail,
@@ -109,7 +107,7 @@ export default function FinanceDashboard() {
     }
   })();
 
-  // Derived data — scoped to current user's group wallet
+  // Derived data
   const ownTx = wallet
     ? transactions.filter((t) => t.walletId === wallet.id)
     : transactions;
@@ -119,9 +117,11 @@ export default function FinanceDashboard() {
   const totalDebit = debitTx.reduce((sum, t) => sum + Math.abs(t.amount), 0);
   const pendingFR = fundRequests.filter((f) => f.status === "PENDING");
   const activeEvents = events.filter(
-    (e) => e.status === "APPROVED" || e.status === "FUNDED" || e.status === "ONGOING"
+    (e) =>
+      e.status === "APPROVED" || e.status === "FUNDED" || e.status === "ONGOING"
   );
-  // Only show events where current user is the assigned approver
+
+  // ActionRequired derived data
   const eventsNeedingReview = events.filter(
     (e) =>
       e.status === "SUBMITTED" &&
@@ -130,7 +130,6 @@ export default function FinanceDashboard() {
       )
   );
   const eventsFunded = events.filter((e) => e.status === "FUNDED");
-  // UNDER_REVIEW events where fund request targets current user's group (RW Treasurer)
   const eventsUnderReview = events.filter(
     (e) =>
       e.status === "UNDER_REVIEW" &&
@@ -190,118 +189,14 @@ export default function FinanceDashboard() {
         </CardContent>
       </Card>
 
-      {/* Alert: Events Needing Review */}
-      {!loading && eventsNeedingReview.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50/60">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <div className="h-9 w-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-amber-800 text-sm">
-                  {eventsNeedingReview.length} acara menunggu persetujuan Anda
-                </h3>
-                <p className="text-xs text-amber-700/80 mt-0.5">
-                  Segera review dan setujui/tolak pengajuan acara berikut.
-                </p>
-                <div className="mt-2.5 space-y-1.5">
-                  {eventsNeedingReview.map((ev) => (
-                    <Link key={ev.id} to={`/dashboard/events/${ev.id}`}>
-                      <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-amber-200 hover:border-amber-400 hover:shadow-sm transition-all cursor-pointer group">
-                        <div className="min-w-0">
-                          <span className="text-sm font-medium text-slate-800 group-hover:text-amber-700 transition-colors">{ev.title}</span>
-                          <span className="text-xs text-slate-500 ml-2 hidden sm:inline">
-                            {formatRupiah(Number(ev.budgetEstimated))}
-                          </span>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-amber-500 shrink-0 group-hover:translate-x-0.5 transition-transform" />
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Alert: Events Needing Expense Report */}
-      {!loading && eventsFunded.length > 0 && (
-        <Card className="border-blue-200 bg-blue-50/60">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <div className="h-9 w-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-                <Receipt className="h-4 w-4 text-blue-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-blue-800 text-sm">
-                  {eventsFunded.length} acara perlu input laporan pengeluaran
-                </h3>
-                <p className="text-xs text-blue-700/80 mt-0.5">
-                  Dana sudah dicairkan. Input daftar belanja dan bukti nota untuk memulai acara.
-                </p>
-                <div className="mt-2.5 space-y-1.5">
-                  {eventsFunded.map((ev) => (
-                    <Link key={ev.id} to={`/dashboard/events/${ev.id}`}>
-                      <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-sm transition-all cursor-pointer group">
-                        <div className="min-w-0">
-                          <span className="text-sm font-medium text-slate-800 group-hover:text-blue-700 transition-colors">{ev.title}</span>
-                          <span className="text-xs text-slate-500 ml-2 hidden sm:inline">
-                            {formatRupiah(Number(ev.budgetEstimated))}
-                          </span>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-blue-500 shrink-0 group-hover:translate-x-0.5 transition-transform" />
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Alert: Events Needing Fund Review (UNDER_REVIEW) */}
-      {!loading && eventsUnderReview.length > 0 && (
-        <Card className="border-indigo-200 bg-indigo-50/60">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <div className="h-9 w-9 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
-                <Banknote className="h-4 w-4 text-indigo-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-indigo-800 text-sm">
-                  {eventsUnderReview.length} pengajuan dana tambahan menunggu review
-                </h3>
-                <p className="text-xs text-indigo-700/80 mt-0.5">
-                  RT mengajukan dana tambahan untuk acara. Segera tinjau dan proses.
-                </p>
-                <div className="mt-2.5 space-y-1.5">
-                  {eventsUnderReview.map((ev) => {
-                    const pending = ev.fundRequests?.find((fr) => fr.status === "PENDING");
-                    return (
-                      <Link key={ev.id} to={`/dashboard/events/${ev.id}`}>
-                        <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-indigo-200 hover:border-indigo-400 hover:shadow-sm transition-all cursor-pointer group">
-                          <div className="min-w-0">
-                            <span className="text-sm font-medium text-slate-800 group-hover:text-indigo-700 transition-colors">{ev.title}</span>
-                            {pending && (
-                              <span className="text-xs text-indigo-600 ml-2">
-                                {formatRupiah(Number(pending.amount))}
-                              </span>
-                            )}
-                          </div>
-                          <ArrowRight className="h-4 w-4 text-indigo-500 shrink-0 group-hover:translate-x-0.5 transition-transform" />
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Action Required — replaces all 3 individual alert cards */}
+      <ActionRequired
+        eventsNeedingReview={eventsNeedingReview}
+        eventsFunded={eventsFunded}
+        eventsUnderReview={eventsUnderReview}
+        pendingFundRequests={pendingFR}
+        loading={loading}
+      />
 
       {/* Summary Cards */}
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
@@ -344,7 +239,9 @@ export default function FinanceDashboard() {
               <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">
                 {card.title}
               </CardTitle>
-              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${card.iconBg}`}>
+              <div
+                className={`h-8 w-8 rounded-lg flex items-center justify-center ${card.iconBg}`}
+              >
                 {card.icon}
               </div>
             </CardHeader>
@@ -409,7 +306,9 @@ export default function FinanceDashboard() {
           <Link key={link.to} to={link.to}>
             <Card className="group hover:border-primary/30 hover:shadow-md transition-all cursor-pointer">
               <CardContent className="flex items-center gap-3 py-4">
-                <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${link.iconBg}`}>
+                <div
+                  className={`h-9 w-9 rounded-lg flex items-center justify-center ${link.iconBg}`}
+                >
                   {link.icon}
                 </div>
                 <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900 transition-colors">

@@ -75,10 +75,21 @@ export default function EventsPage() {
 
     const fetchAllUsers = async () => {
         try {
-            const res = await userService.getFiltered({ limit: 200 });
-            setAllUsers(res.data);
-        } catch {
-            // Non-critical
+            const res = await userService.getFiltered({ limit: 100 });
+
+            // 1. Cek isi sebenarnya dari response API di console
+            console.log("Data mentah dari API Users:", res);
+
+            // 2. Pastikan yang dimasukkan ke state benar-benar sebuah Array
+            if (Array.isArray(res)) {
+                setAllUsers(res);
+            } else {
+                console.warn("Format data user tidak dikenali, diset ke array kosong:", res);
+                setAllUsers([]);
+            }
+        } catch (error) {
+            console.error("Gagal menarik data user:", error);
+            setAllUsers([]); // Pastikan tetap array kosong jika gagal
         }
     };
 
@@ -141,11 +152,13 @@ export default function EventsPage() {
                         Kelola seluruh kegiatan dan acara lingkungan.
                     </p>
                 </div>
-                {(() => { try { const u = localStorage.getItem("user"); if (u && JSON.parse(u).role === "TREASURER") return null; } catch {} return (
-                  <Button onClick={() => setShowCreateDialog(true)} className="shrink-0">
-                      <Plus className="h-4 w-4 mr-1" /> Buat Acara Baru
-                  </Button>
-                ); })()}
+                {(() => {
+                    try { const u = localStorage.getItem("user"); if (u && JSON.parse(u).role === "TREASURER") return null; } catch { } return (
+                        <Button onClick={() => setShowCreateDialog(true)} className="shrink-0">
+                            <Plus className="h-4 w-4 mr-1" /> Buat Acara Baru
+                        </Button>
+                    );
+                })()}
             </div>
 
             {/* Summary Cards */}

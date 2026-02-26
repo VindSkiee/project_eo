@@ -14,7 +14,6 @@ import { Loader2 } from "lucide-react";
 // Jika belum ada, buat file dummy atau hapus import ini sementara
 import { authService } from "@/features/auth/services/authService";
 import axios from "axios";
-import { AccountInfoCards } from "@/shared/components/AccountInfoCards";
 
 // Schema Validasi
 const loginSchema = z.object({
@@ -93,12 +92,7 @@ export default function LoginPage() {
       {/* LEFT SIDE */}
       <div className="relative hidden h-full flex-col p-10 text-white lg:flex justify-center items-start overflow-hidden">
         <div className="absolute inset-0 z-0">
-          <img src="/images/login.leftside2.webp" alt="Background" className="w-full h-full object-cover mix-blend-overlay" />
-        </div>
-        
-        {/* Account Info Cards - Top Left */}
-        <div className="relative z-10 self-start">
-          <AccountInfoCards />
+          <img src="/images/login.leftside2.webp" alt="Background" className="w-full h-full object-cover" />
         </div>
       </div>
 

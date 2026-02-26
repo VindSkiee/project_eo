@@ -193,7 +193,7 @@ function ParentRow({ group, index }: { group: GroupProgressSummary; index: numbe
       onClick={() => navigate(targetPath)} // <--- UBAH DI SINI
       className="hover:bg-slate-100 transition-colors group cursor-pointer"
     >
-      <td className="py-4 px-4 text-slate-400 text-sm">{index}</td>
+      <td className="text-center py-4 px-4 text-slate-400 text-sm">{index}</td>
       <td className="py-4 px-4">
         <div className="min-w-0">
           {/* Ubah warna text saat di-hover agar user tahu ini bisa diklik */}
@@ -239,7 +239,7 @@ function ParentRow({ group, index }: { group: GroupProgressSummary; index: numbe
 function ChildRow({ member, index, year, currentMonth, currentYear, isFullyPaid }: any) {
   return (
     <tr className="hover:bg-slate-50/80 transition-colors group">
-      <td className="py-4 px-4 text-slate-400 text-sm">{index}</td>
+      <td className="text-center py-4 px-4 text-slate-400 text-sm">{index}</td>
       <td className="py-4 px-4">
         <div className="min-w-0">
           <p className="font-semibold text-slate-900 text-sm truncate">{member.fullName}</p>
