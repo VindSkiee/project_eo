@@ -271,26 +271,64 @@ export default function GroupFinanceDetailPage() {
             </CardContent>
           </Card>
         ) : (
-          <Card>
-            <div className="overflow-x-auto">
+          <Card className="overflow-hidden">
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {filteredTx.map((tx, idx) => {
+                const isIncome = tx.type === "INCOME" || tx.type === "CREDIT";
+                return (
+                  <div
+                    key={tx.id}
+                    className="px-4 py-3.5 cursor-pointer hover:bg-slate-50/80 active:bg-slate-100 transition-colors"
+                    onClick={() => navigate(`${txDetailBasePath}/${tx.id}`)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
+                          isIncome ? "bg-emerald-100" : "bg-red-100"
+                        }`}
+                      >
+                        {isIncome ? (
+                          <ArrowDownLeft className="h-4 w-4 text-emerald-600" />
+                        ) : (
+                          <ArrowUpRight className="h-4 w-4 text-red-600" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium text-slate-900 truncate">{tx.description}</p>
+                          <span className={`text-sm font-semibold shrink-0 ${
+                            isIncome ? "text-emerald-600" : "text-red-600"
+                          }`}>
+                            {isIncome ? "+" : "-"}{formatRupiah(Math.abs(tx.amount))}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 mt-0.5">
+                          <p className="text-xs text-slate-500">{tx.createdBy?.fullName || "Sistem"}</p>
+                          <p className="text-xs text-slate-400">{formatDateTime(tx.createdAt)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 ml-12">
+                      <Badge variant={isIncome ? "default" : "destructive"} className="text-[10px]">
+                        {isIncome ? "Masuk" : "Keluar"}
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-100">
-                    <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">
-                      #
-                    </th>
-                    <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">
-                      Deskripsi
-                    </th>
-                    <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">
-                      Tipe
-                    </th>
-                    <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">
-                      Jumlah
-                    </th>
-                    <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">
-                      Tanggal
-                    </th>
+                    <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">#</th>
+                    <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">Deskripsi</th>
+                    <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">Tipe</th>
+                    <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">Jumlah</th>
+                    <th className="text-left text-xs font-medium text-slate-500 px-4 py-3">Tanggal</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -302,9 +340,7 @@ export default function GroupFinanceDetailPage() {
                         className="border-b border-slate-50 hover:bg-slate-50/80 cursor-pointer transition-colors"
                         onClick={() => navigate(`${txDetailBasePath}/${tx.id}`)}
                       >
-                        <td className="px-4 py-3 text-sm text-slate-500">
-                          {idx + 1}
-                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-500">{idx + 1}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <div
@@ -319,34 +355,22 @@ export default function GroupFinanceDetailPage() {
                               )}
                             </div>
                             <div>
-                              <p className="text-sm font-medium text-slate-900">
-                                {tx.description}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {tx.createdBy?.fullName || "Sistem"}
-                              </p>
+                              <p className="text-sm font-medium text-slate-900">{tx.description}</p>
+                              <p className="text-xs text-slate-500">{tx.createdBy?.fullName || "Sistem"}</p>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <Badge
-                            variant={isIncome ? "default" : "destructive"}
-                            className="text-[10px]"
-                          >
+                          <Badge variant={isIncome ? "default" : "destructive"} className="text-[10px]">
                             {isIncome ? "Masuk" : "Keluar"}
                           </Badge>
                         </td>
-                        <td
-                          className={`px-4 py-3 font-medium ${
-                            isIncome ? "text-emerald-600" : "text-red-600"
-                          }`}
-                        >
-                          {isIncome ? "+" : "-"}
-                          {formatRupiah(Math.abs(tx.amount))}
+                        <td className={`px-4 py-3 font-medium ${
+                          isIncome ? "text-emerald-600" : "text-red-600"
+                        }`}>
+                          {isIncome ? "+" : "-"}{formatRupiah(Math.abs(tx.amount))}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-500">
-                          {formatDateTime(tx.createdAt)}
-                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-500">{formatDateTime(tx.createdAt)}</td>
                       </tr>
                     );
                   })}

@@ -131,7 +131,7 @@ export default function EventsPage() {
         }
         if (activeTab === "semua") return true;
         if (activeTab === "menunggu") return PENDING_STATUSES.includes(e.status);
-        if (activeTab === "aktif") return ACTIVE_STATUSES.includes(e.status);
+        if (activeTab === "berjalan") return ACTIVE_STATUSES.includes(e.status);
         if (activeTab === "selesai") return DONE_STATUSES.includes(e.status);
         if (activeTab === "draft") return e.status === "DRAFT";
         return true;
@@ -162,7 +162,7 @@ export default function EventsPage() {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid gap-4 grid-cols-3">
+            <div className="grid gap-3 sm:gap-4 grid-cols-3">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">
@@ -192,7 +192,7 @@ export default function EventsPage() {
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">
-                            Aktif
+                            Berjalan
                         </CardTitle>
                         <Zap className="h-4 w-4 text-emerald-500" />
                     </CardHeader>
@@ -207,16 +207,18 @@ export default function EventsPage() {
             {/* Tabs + Search */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <TabsList>
-                        <TabsTrigger value="semua">Semua</TabsTrigger>
-                        <TabsTrigger value="draft">Draft</TabsTrigger>
-                        <TabsTrigger value="menunggu">
-                            Menunggu {pendingCount > 0 && `(${pendingCount})`}
-                        </TabsTrigger>
-                        <TabsTrigger value="aktif">Aktif</TabsTrigger>
-                        <TabsTrigger value="selesai">Selesai</TabsTrigger>
-                    </TabsList>
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="overflow-x-auto -mx-1 px-1 pb-0.5">
+                        <TabsList className="w-max">
+                            <TabsTrigger value="semua">Semua</TabsTrigger>
+                            <TabsTrigger value="draft">Draft</TabsTrigger>
+                            <TabsTrigger value="menunggu">
+                                Menunggu {pendingCount > 0 && `(${pendingCount})`}
+                            </TabsTrigger>
+                            <TabsTrigger value="berjalan">Berjalan</TabsTrigger>
+                            <TabsTrigger value="selesai">Selesai</TabsTrigger>
+                        </TabsList>
+                    </div>
+                    <div className="flex gap-2 flex-wrap shrink-0">
                         <DateRangeFilter
                             value={dateRange}
                             onChange={setDateRange}

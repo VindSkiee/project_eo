@@ -3,16 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/shared/ui/card";
 import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";
-import { Separator } from "@/shared/ui/separator";
 import { ArrowLeft, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { userService } from "@/shared/services/userService";
 import { loadCustomRoleLabels, getRoleLabel } from "@/shared/helpers/roleLabel";
-import type { UserItem, Transaction } from "@/shared/types";
+import type { UserItem } from "@/shared/types";
 import {
   UserProfileCard,
-  DuesStatusGrid,
-  UserTransactionHistory,
   UserAdditionalInfo,
 } from "@/features/profile/components";
 
@@ -21,11 +18,8 @@ export default function UserDetailPage() {
   const navigate = useNavigate();
   
   const [user, setUser] = useState<UserItem | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [resolvedRoleLabel, setResolvedRoleLabel] = useState("");
-
-  const currentYear = new Date().getFullYear();
 
   useEffect(() => {
     if (!id) return;
@@ -38,28 +32,11 @@ export default function UserDetailPage() {
       // Pastikan custom role label sudah termuat dari local storage
       await loadCustomRoleLabels();
 
-      // Panggil backend: userService.getById seharusnya sudah memuat relasi 'payments' & 'contributions'
       const userData = await userService.getById(id!);
       setUser(userData);
       
       const resolvedType = userData.roleType || userData.role?.type || "";
       setResolvedRoleLabel(getRoleLabel(resolvedType));
-
-      // Jika user adalah RESIDENT, mapping data pembayarannya ke bentuk Transaction
-      if (resolvedType === "RESIDENT" && userData.paymentGatewayTxs && userData.paymentGatewayTxs.length > 0) {
-        const mappedHistory: Transaction[] = userData.paymentGatewayTxs.map((p: any) => ({
-          id: p.id,
-          walletId: 0, // <--- TAMBAHKAN INI (Dummy ID agar TS tidak protes)
-          description: `Pembayaran Iuran (Order: ${p.orderId || 'Sistem'})`,
-          type: "CREDIT" as const, // <--- Gunakan 'as const' jika TS meminta union type 'CREDIT' | 'DEBIT'
-          amount: Number(p.amount), 
-          createdAt: p.createdAt,
-        }));
-        
-        setTransactions(mappedHistory);
-      } else {
-        setTransactions([]);
-      }
       
     } catch {
       toast.error("Gagal memuat data pengguna.");
@@ -111,8 +88,6 @@ export default function UserDetailPage() {
     );
   }
 
-  const userResolvedRole = user.roleType || user.role?.type || "";
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Back button */}
@@ -123,25 +98,8 @@ export default function UserDetailPage() {
       {/* Profile Header */}
       <UserProfileCard user={user} roleLabel={resolvedRoleLabel} />
 
-      {/* === RESIDENT-ONLY: Dues Grid & Transaction History === */}
-      {userResolvedRole === "RESIDENT" && (
-        <>
-          <DuesStatusGrid
-            targetYear={currentYear} // Menggunakan tahun berjalan otomatis
-            createdAt={user.createdAt}          
-            lastPaidPeriod={user.lastPaidPeriod} 
-            contributions={user.contributions || []} 
-          />
-          <Separator />
-          {/* Oper mapping transaksi yang bersih ke tabel */}
-          <UserTransactionHistory transactions={transactions} />
-        </>
-      )}
-
-      {/* === NON-RESIDENT: Only profile info === */}
-      {userResolvedRole !== "RESIDENT" && (
-        <UserAdditionalInfo user={user} roleLabel={resolvedRoleLabel} />
-      )}
+      {/* Profile Info Details (Sekarang muncul untuk semua role) */}
+      <UserAdditionalInfo user={user} roleLabel={resolvedRoleLabel} />
     </div>
   );
 }

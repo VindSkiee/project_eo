@@ -18,9 +18,9 @@ type PaymentStatus = "PENDING" | "PAID" | "CANCELLED" | "EXPIRED" | "FAILED" | "
 
 const paymentStatusConfig: Record<
   PaymentStatus,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof CheckCircle2 }
+  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof CheckCircle2; className?: string }
 > = {
-  PENDING: { label: "Menunggu", variant: "secondary", icon: Clock },
+  PENDING: { label: "Menunggu", variant: "outline", icon: Clock, className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
   PAID: { label: "Berhasil", variant: "default", icon: CheckCircle2 },
   CANCELLED: { label: "Dibatalkan", variant: "destructive", icon: XCircle },
   EXPIRED: { label: "Kedaluwarsa", variant: "outline", icon: AlertCircle },
@@ -104,7 +104,7 @@ export function PaymentTable({
           icon: AlertCircle,
         };
         return (
-          <Badge variant={sc.variant} className="text-[10px]">
+          <Badge variant={sc.variant} className={`text-[10px] ${sc.className ?? ""}`}>
             {sc.label}
           </Badge>
         );

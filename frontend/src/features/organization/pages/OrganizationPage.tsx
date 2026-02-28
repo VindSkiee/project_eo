@@ -89,6 +89,18 @@ export default function OrganizationPage() {
 }
 
 // =============================================
+// DEBOUNCE HOOK
+// =============================================
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
+// =============================================
 // LEADER VIEW (Full CRUD)
 // =============================================
 function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
@@ -98,6 +110,7 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
   const [searchRT, setSearchRT] = useState("");
   const [searchWarga, setSearchWarga] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [editingGroup, setEditingGroup] = useState<GroupItem | null>(null);
   const [editGroupName, setEditGroupName] = useState("");
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
@@ -112,25 +125,34 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
   const [pendingDeleteGroup, setPendingDeleteGroup] = useState<{ id: number; name: string } | null>(null);
   const [pendingDeleteUser, setPendingDeleteUser] = useState<{ id: string; name: string } | null>(null);
 
+  const debouncedSearchWarga = useDebounce(searchWarga, 500);
+
+  const refetchSearch = useCallback((query: string) => {
+    if (!query) { setUsers([]); return; }
+    setIsSearching(true);
+    userService.getFiltered({ search: query, limit: 100 })
+      .then((res) => setUsers(Array.isArray(res) ? res : (res?.data || [])))
+      .catch(() => toast.error("Gagal mencari warga."))
+      .finally(() => setIsSearching(false));
+  }, []);
+
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    refetchSearch(debouncedSearchWarga);
+  }, [debouncedSearchWarga, refetchSearch]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [groupsData, usersData] = await Promise.allSettled([
-        groupService.getAll(), userService.getAll(),
-      ]);
-      if (groupsData.status === "fulfilled") setGroups(groupsData.value);
-      if (usersData.status === "fulfilled") setUsers(usersData.value);
-      if (groupsData.status === "rejected") toast.error("Gagal memuat data organisasi.");
-      if (groupsData.status === "fulfilled") {
-        const rtGroupsData = groupsData.value.filter((g) => g.type === "RT");
-        const countPromises = rtGroupsData.map((rt) =>
-          userService.getCountByGroup(rt.id).then((count) => ({ id: rt.id, count })).catch(() => ({ id: rt.id, count: 0 }))
-        );
-        const counts = await Promise.all(countPromises);
-        setRtMemberCounts(counts.reduce((acc, { id, count }) => { acc[id] = count; return acc; }, {} as Record<number, number>));
-      }
+      const groupsData = await groupService.getAll();
+      setGroups(groupsData);
+      const rtGroupsData = groupsData.filter((g) => g.type === "RT");
+      const countPromises = rtGroupsData.map((rt) =>
+        userService.getCountByGroup(rt.id).then((count) => ({ id: rt.id, count })).catch(() => ({ id: rt.id, count: 0 }))
+      );
+      const counts = await Promise.all(countPromises);
+      setRtMemberCounts(counts.reduce((acc, { id, count }) => { acc[id] = count; return acc; }, {} as Record<number, number>));
     } catch { toast.error("Gagal memuat data."); }
     finally { setLoading(false); }
   };
@@ -138,9 +160,6 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
   const rwGroups = groups.filter((g) => g.type === "RW");
   const rtGroups = groups.filter((g) => g.type === "RT");
   const filteredRT = rtGroups.filter((g) => g.name.toLowerCase().includes(searchRT.toLowerCase()));
-  const filteredWarga = users.filter(
-    (u) => u.fullName.toLowerCase().includes(searchWarga.toLowerCase()) || u.email.toLowerCase().includes(searchWarga.toLowerCase())
-  );
 
   const fetchRTMembers = useCallback(async (groupId: number) => {
     if (rtMembers[groupId]) return;
@@ -184,13 +203,20 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 
   const executeDeleteUser = async () => {
     if (!pendingDeleteUser) return;
-    try { await userService.delete(pendingDeleteUser.id); toast.success(`${pendingDeleteUser.name} berhasil dihapus.`); setPendingDeleteUser(null); fetchData(); } catch { toast.error("Gagal menghapus warga."); }
+    const deletedId = pendingDeleteUser.id;
+    try {
+      await userService.delete(deletedId);
+      toast.success(`${pendingDeleteUser.name} berhasil dihapus.`);
+      setPendingDeleteUser(null);
+      setUsers((prev) => prev.filter((u) => u.id !== deletedId));
+      fetchData();
+    } catch { toast.error("Gagal menghapus warga."); }
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <OrgHeader />
-      <OrganizationSummaryCards groups={groups} rwGroups={rwGroups} rtGroups={rtGroups} users={users} loading={loading} isLeader={true} />
+      <OrganizationSummaryCards groups={groups} rwGroups={rwGroups} rtGroups={rtGroups} users={users} loading={loading} isLeader={true} totalWarga={Object.values(rtMemberCounts).reduce((sum, c) => sum + c, 0)} />
       <Tabs defaultValue="data-rt" className="space-y-4">
         <TabsList>
           <TabsTrigger value="data-rt">Data RT</TabsTrigger>
@@ -211,7 +237,6 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
           ) : (
             <div className="space-y-3">
               {filteredRT.map((group) => {
-                const parentRw = rwGroups.find((rw) => rw.id === group.parentId);
                 const isExpanded = expandedRT === group.id;
                 const members = rtMembers[group.id] || [];
                 const isLoadingThisRT = loadingMembers === group.id;
@@ -224,7 +249,7 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
                             <ChevronDown className={`h-4 w-4 text-slate-400 shrink-0 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"}`} />
                             <div className="min-w-0">
                               <p className="font-medium text-slate-900 text-sm sm:text-base">{group.name}</p>
-                              <p className="text-xs text-slate-500">{parentRw?.name || ""}  {rtMemberCounts[group.id] !== undefined ? `${rtMemberCounts[group.id]} warga` : ""}</p>
+                              <p className="text-xs text-slate-500">{rtMemberCounts[group.id] !== undefined ? `${rtMemberCounts[group.id]} warga` : ""}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
@@ -253,9 +278,13 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input placeholder="Cari warga..." value={searchWarga} onChange={(e) => setSearchWarga(e.target.value)} className="pl-9 h-10" />
             </div>
-            <CreateWargaDialog groups={groups} onSuccess={fetchData} />
+            <CreateWargaDialog groups={groups} onSuccess={() => { fetchData(); refetchSearch(searchWarga); }} />
           </div>
-          <WargaTable users={filteredWarga} loading={loading} searchQuery={searchWarga} currentUserId={getUserIdFromStorage() || undefined} onUserClick={(userId) => navigate(`/dashboard/users/${userId}`)} onEdit={openEditUser} onDelete={handleDeleteUser} />
+          {!searchWarga ? (
+            <EmptyState text="Cari Warga" subtext="Ketikkan nama warga pada kolom pencarian di atas untuk menampilkan data" />
+          ) : (
+            <WargaTable users={users} loading={isSearching} searchQuery={searchWarga} currentUserId={getUserIdFromStorage() || undefined} onUserClick={(userId) => navigate(`/dashboard/users/${userId}`)} onEdit={openEditUser} onDelete={handleDeleteUser} />
+          )}
         </TabsContent>
       </Tabs>
 
@@ -263,7 +292,7 @@ function LeaderView({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
         onSuccess={() => { setEditingGroup(null); fetchData(); if (editingGroup) setRtMembers((prev) => { const copy = { ...prev }; delete copy[editingGroup.id]; return copy; }); }}
         submitting={submitting} setSubmitting={setSubmitting} />
       <EditWargaDialog user={editingUser} groups={groups} form={editUserForm} onFormChange={setEditUserForm} onClose={() => setEditingUser(null)}
-        onSuccess={() => { setEditingUser(null); fetchData(); setRtMembers({}); }}
+        onSuccess={() => { setEditingUser(null); fetchData(); setRtMembers({}); refetchSearch(searchWarga); }}
         submitting={submitting} setSubmitting={setSubmitting} />
 
       <ConfirmDialog
@@ -782,13 +811,13 @@ function ReadOnlyMemberTable({ members, loading, navigate, showDetail, currentUs
         <p className="text-xs text-slate-400 mt-1">Anggota akan muncul di sini</p>
       </div>
     );
-  }
+}
 
   const getRoleBadgeClass = (rt: string) => {
-    if (rt === "LEADER") return "bg-indigo-50 text-indigo-700";
-    if (rt === "ADMIN") return "bg-blue-50 text-blue-700";
-    if (rt === "TREASURER") return "bg-amber-50 text-amber-700";
-    return "bg-slate-50 text-slate-600";
+    if (rt === "LEADER") return "bg-indigo-100 text-indigo-700";
+    if (rt === "ADMIN") return "bg-blue-100 text-blue-700";
+    if (rt === "TREASURER") return "bg-amber-100 text-amber-700";
+    return "bg-slate-100 text-slate-700";
   };
 
   const columns: ColumnDef<UserItem>[] = [

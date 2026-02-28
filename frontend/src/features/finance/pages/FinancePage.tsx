@@ -339,7 +339,7 @@ export default function FinancePage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold font-poppins text-slate-900">
             Kas & Keuangan
@@ -348,7 +348,7 @@ export default function FinancePage() {
             Kelola kas, transaksi, dan pengajuan dana.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           {canCreateTransaction && (
             <Button
               variant="outline"
@@ -396,7 +396,7 @@ export default function FinancePage() {
       </Card>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 font-poppins">
@@ -468,12 +468,16 @@ export default function FinancePage() {
 
       {/* Tabs: Transaksi / Pengajuan Dana */}
       <Tabs defaultValue="transaksi" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="transaksi">Riwayat Transaksi</TabsTrigger>
-          <TabsTrigger value="pengajuan">
-            Pengajuan Dana {pendingFR.length > 0 && `(${pendingFR.length})`}
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-1 px-1 pb-0.5">
+          <TabsList className="w-max">
+            <TabsTrigger value="transaksi">Riwayat Transaksi</TabsTrigger>
+            {userRole !== "LEADER" && (
+              <TabsTrigger value="pengajuan">
+                Pengajuan Dana {pendingFR.length > 0 && `(${pendingFR.length})`}
+              </TabsTrigger>
+            )}
+          </TabsList>
+        </div>
 
         {/* === TAB: Transaksi === */}
         <TabsContent value="transaksi" className="space-y-4">
@@ -578,11 +582,13 @@ export default function FinancePage() {
             <Card>
               <FundRequestTable
                 fundRequests={filteredFR}
+                canApprove={isRwTreasurer}
                 onApprove={handleApproveFR}
                 onReject={(fr) => {
                   setSelectedFR(fr);
                   setRejectReason("");
                 }}
+                onRowClick={(fr) => navigate(`/dashboard/pengajuan-dana/${fr.id}`)}
               />
             </Card>
           )}

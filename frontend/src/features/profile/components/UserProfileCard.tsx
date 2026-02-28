@@ -45,7 +45,16 @@ export function UserProfileCard({ user, roleLabel }: UserProfileCardProps) {
               </h1>
               <div className="flex items-center gap-2 justify-center sm:justify-start">
                 <Badge
-                  variant={user.roleType === "LEADER" ? "default" : user.roleType === "ADMIN" ? "secondary" : "outline"}
+                  variant="outline"
+                  className={
+                    user.roleType === "LEADER"
+                      ? "bg-indigo-100 text-indigo-700 border-indigo-200"
+                      : user.roleType === "ADMIN"
+                      ? "bg-blue-100 text-blue-700 border-blue-200"
+                      : user.roleType === "TREASURER"
+                      ? "bg-amber-100 text-amber-700 border-amber-200"
+                      : "bg-slate-100 text-slate-700 border-slate-200"
+                  }
                 >
                   {displayRole}
                 </Badge>

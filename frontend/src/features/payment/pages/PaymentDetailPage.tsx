@@ -66,13 +66,14 @@ function getStatusConfig(status: string) {
     case "PENDING":
       return {
         label: "Menunggu Pembayaran",
-        variant: "secondary" as const,
+        variant: "outline" as const,
         icon: Clock,
         color: "text-amber-600",
         bg: "bg-amber-50",
         border: "border-amber-200",
         gradient: "from-amber-500 to-orange-500",
         description: "Silakan selesaikan pembayaran Anda sebelum batas waktu.",
+        badgeClassName: "bg-yellow-50 text-yellow-700 border-yellow-200",
       };
     case "FAILED":
       return {
@@ -314,7 +315,7 @@ export default function PaymentDetailPage() {
             <ShieldCheck className="h-4 w-4 text-slate-400 shrink-0" />
             <div>
               <p className="text-xs text-slate-500">Status</p>
-              <Badge variant={status.variant} className="mt-0.5">
+              <Badge variant={status.variant} className={`mt-0.5 ${(status as { badgeClassName?: string }).badgeClassName ?? ""}`}>
                 {status.label}
               </Badge>
             </div>

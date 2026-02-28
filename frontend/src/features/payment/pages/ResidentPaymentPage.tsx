@@ -68,7 +68,7 @@ function getStatusConfig(status: string) {
     case "PAID":
       return { label: "Berhasil", variant: "default" as const, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" };
     case "PENDING":
-      return { label: "Menunggu", variant: "secondary" as const, icon: Clock, color: "text-amber-600", bg: "bg-amber-50" };
+      return { label: "Menunggu", variant: "outline" as const, icon: Clock, color: "text-amber-600", bg: "bg-amber-50", badgeClassName: "bg-yellow-50 text-yellow-700 border-yellow-200" };
     case "FAILED":
       return { label: "Gagal", variant: "destructive" as const, icon: XCircle, color: "text-red-600", bg: "bg-red-50" };
     case "EXPIRED":
@@ -767,7 +767,7 @@ export default function ResidentPaymentPage() {
                             <p className="text-sm sm:text-base font-bold text-slate-900 font-poppins tracking-tight">
                               {formatRupiah(Number(payment.amount))}
                             </p>
-                            <Badge variant={status.variant} className="text-[10px] px-2 py-0">
+                            <Badge variant={status.variant} className={`text-[10px] px-2 py-0 ${(status as { badgeClassName?: string }).badgeClassName ?? ""}`}>
                               {status.label}
                             </Badge>
                           </div>

@@ -31,6 +31,11 @@ const approvalStatusVariant = (
   return variants[status] || "outline";
 };
 
+const approvalStatusClassName = (status: string): string => {
+  if (status === "PENDING") return "bg-yellow-50 text-yellow-700 border-yellow-200";
+  return "";
+};
+
 interface ApprovalWorkflowProps {
   event: EventItem;
 }
@@ -49,7 +54,42 @@ export function ApprovalWorkflow({ event }: ApprovalWorkflowProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-slate-100 rounded-lg border overflow-hidden">
+          {event.approvals
+            .sort((a, b) => a.stepOrder - b.stepOrder)
+            .map((approval) => (
+              <div key={approval.id} className="px-4 py-3.5 space-y-2.5 bg-white">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Langkah</span>
+                  <span className="text-sm font-semibold text-slate-700">#{approval.stepOrder}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Peran</span>
+                  <span className="text-sm text-slate-700">{approval.roleSnapshot}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Status</span>
+                  <Badge variant={approvalStatusVariant(approval.status)}>
+                    {approvalStatusLabel(approval.status)}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Penyetuju</span>
+                  <span className="text-sm text-slate-700">{approval.approver?.fullName || "-"}</span>
+                </div>
+                {approval.notes && (
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 shrink-0 pt-0.5">Catatan</span>
+                    <span className="text-sm text-slate-600 text-right">{approval.notes}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+        </div>
+
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -68,7 +108,7 @@ export function ApprovalWorkflow({ event }: ApprovalWorkflowProps) {
                     <TableCell className="font-medium text-center">{approval.stepOrder}</TableCell>
                     <TableCell className="text-center">{approval.roleSnapshot}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant={approvalStatusVariant(approval.status)}>
+                      <Badge variant={approvalStatusVariant(approval.status)} className={approvalStatusClassName(approval.status)}>
                         {approvalStatusLabel(approval.status)}
                       </Badge>
                     </TableCell>

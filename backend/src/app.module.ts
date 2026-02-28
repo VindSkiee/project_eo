@@ -1,5 +1,6 @@
 import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD, APP_INTERCEPTOR, APP_PIPE, APP_FILTER } from '@nestjs/core';
 
 import { AppController } from './app.controller';
@@ -37,6 +38,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
       envFilePath: '.env',
       load: [appConfig, databaseConfig, midtransConfig],
     }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     MailModule,
     StorageModule,
@@ -53,7 +55,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
       {
         name: 'short',
         ttl: 1000,
-        limit: 5,
+        limit: 10,
       },
 
       // 2. Mode Hemat CPU (Sustained Usage)

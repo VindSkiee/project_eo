@@ -687,6 +687,106 @@ export class EventsService {
   }
 
   // ==========================================
+  // ==========================================
+  // AUTO-CANCEL: Batalkan event yang melewati endDate (dipanggil oleh scheduler)
+  // ==========================================
+  async autoCancelExpiredEvents() {
+    const now = new Date();
+
+    // Status yang bisa di-auto-cancel (kecuali ONGOING yang ditangani autoComplete)
+    const cancellableStatuses: EventStatus[] = [
+      EventStatus.DRAFT,
+      EventStatus.SUBMITTED,
+      EventStatus.UNDER_REVIEW,
+      EventStatus.APPROVED,
+      EventStatus.FUNDED,
+    ];
+
+    const expiredEvents = await this.prisma.event.findMany({
+      where: {
+        status: { in: cancellableStatuses },
+        endDate: { lt: now, not: null },
+      },
+      include: {
+        // Ambil fund requests yang sudah disetujui untuk hitung refund per sumber
+        fundRequests: {
+          where: { status: FundRequestStatus.APPROVED },
+          select: { amount: true, targetGroupId: true },
+        },
+      },
+    });
+
+    for (const event of expiredEvents) {
+      try {
+        await this.processAutoCancelEvent(event);
+      } catch (err: unknown) {
+        const error = err as Error;
+        this.logger.error(
+          `Gagal auto-cancel event ${event.id}: ${error.message}`,
+          error.stack,
+        );
+      }
+    }
+
+    if (expiredEvents.length > 0) {
+      this.logger.log(`Auto-cancel: ${expiredEvents.length} event dibatalkan karena melewati waktu selesai.`);
+    }
+  }
+
+  // ==========================================
+  // HELPER: Proses pembatalan + refund per sumber dana
+  // ==========================================
+  private async processAutoCancelEvent(
+    event: { id: string; status: EventStatus; communityGroupId: number; budgetEstimated: any; createdById: string; fundRequests: { amount: any; targetGroupId: number }[] },
+  ) {
+    // Hanya event FUNDED yang perlu refund (sudah ada uang keluar)
+    if (event.status === EventStatus.FUNDED) {
+      const approvedFundRequests = event.fundRequests;
+
+      // Total dana tambahan dari RW yang sudah dicairkan ke RT
+      const totalExtraFunds = approvedFundRequests.reduce(
+        (sum, fr) => sum + Number(fr.amount),
+        0,
+      );
+
+      // Dana awal yang dari kas RT
+      const initialRtBudget = Number(event.budgetEstimated) - totalExtraFunds;
+
+      // 1. Kembalikan dana awal ke kas RT
+      if (initialRtBudget > 0) {
+        await this.financeService.refundEventFund(
+          event.communityGroupId,
+          initialRtBudget,
+          event.id,
+          'Auto-pembatalan sistem: Acara melewati waktu selesai. Pengembalian dana awal ke kas RT.',
+        );
+      }
+
+      // 2. Kembalikan dana tambahan ke masing-masing sumbernya (kas RW)
+      for (const fr of approvedFundRequests) {
+        await this.financeService.refundEventFund(
+          fr.targetGroupId,
+          Number(fr.amount),
+          event.id,
+          'Auto-pembatalan sistem: Acara melewati waktu selesai. Pengembalian dana tambahan ke kas RW.',
+        );
+      }
+
+      this.logger.log(
+        `Event ${event.id} auto-cancelled: refund RT Rp${initialRtBudget}, RW Rp${totalExtraFunds} (${approvedFundRequests.length} fund request).`,
+      );
+    }
+
+    // Update status ke CANCELLED
+    await this.eventsRepo.updateEventStatus(
+      event.id,
+      EventStatus.CANCELLED,
+      event.createdById,
+      'Otomatis dibatalkan oleh sistem karena telah melewati waktu selesai tanpa konfirmasi kegiatan berlangsung.',
+    );
+  }
+
+  // ==========================================
   // HELPER: Auto-Complete expired ONGOING events
   // ==========================================
   private async autoCompleteExpiredEvents(groupIds: number[]) {

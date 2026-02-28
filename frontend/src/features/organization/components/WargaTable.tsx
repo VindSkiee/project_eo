@@ -20,10 +20,10 @@ function sortMembers(members: UserItem[], currentUserId?: string): UserItem[] {
 }
 
 function getRoleBadgeClass(roleType: string) {
-  if (roleType === "LEADER") return "bg-indigo-50 text-indigo-700";
-  if (roleType === "ADMIN") return "bg-blue-50 text-blue-700";
-  if (roleType === "TREASURER") return "bg-amber-50 text-amber-700";
-  return "bg-slate-50 text-slate-600";
+  if (roleType === "LEADER") return "bg-indigo-100 text-indigo-700";
+  if (roleType === "ADMIN") return "bg-blue-100 text-blue-700";
+  if (roleType === "TREASURER") return "bg-amber-100 text-amber-700";
+  return "bg-slate-100 text-slate-700";
 }
 
 interface WargaTableProps {

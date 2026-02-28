@@ -9,6 +9,12 @@ export const fundRequestService = {
     return response.data.data;
   },
 
+  /** Get a single fund request by ID */
+  getById: async (id: string): Promise<FundRequest> => {
+    const response = await api.get<ApiResponse<FundRequest>>(`/fund-requests/${id}`);
+    return response.data.data;
+  },
+
   /** Create fund request (RT TREASURER → RW) */
   create: async (data: { amount: number; description: string; eventId?: string }): Promise<FundRequest> => {
     const response = await api.post<ApiResponse<FundRequest>>("/fund-requests", data);

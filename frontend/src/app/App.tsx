@@ -24,6 +24,7 @@ import UserDetailPage from "@/features/profile/pages/UserDetailPage";
 import DuesConfigPage from "@/features/finance/pages/DuesConfigPage";
 import GroupFinanceDetailPage from "@/features/finance/pages/GroupFinanceDetailPage";
 import TransactionDetailPage from "@/features/finance/pages/TransactionDetailPage";
+import FundRequestDetailPage from "@/features/finance/pages/FundRequestDetailPage";
 import GroupDuesProgressPage from "@/features/payment/pages/GroupDuesProgressPage";
 import RoleLabelSettingsPage from "@/features/settings/pages/RoleLabelSettingsPage";
 
@@ -170,6 +171,11 @@ function App() {
                 {/* Detail Keuangan RT — Bisa diakses oleh LEADER, ADMIN, dan TREASURER */}
                 <Route element={<RoleProtectedRoute allowedRoles={["LEADER", "ADMIN", "TREASURER"]} />}>
                   <Route path="keuangan-rt/:groupId" element={<GroupFinanceDetailPage />} />
+                </Route>
+
+                {/* Detail Pengajuan Dana — ADMIN dan TREASURER */}
+                <Route element={<RoleProtectedRoute allowedRoles={["ADMIN", "TREASURER"]} />}>
+                  <Route path="pengajuan-dana/:id" element={<FundRequestDetailPage />} />
                 </Route>
 
                 {/* Pengaturan Iuran — LEADER dan ADMIN */}

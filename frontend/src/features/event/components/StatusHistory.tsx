@@ -35,8 +35,8 @@ const eventStatusVariant = (
 ): "default" | "secondary" | "destructive" | "outline" => {
   const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
     DRAFT: "outline",
-    SUBMITTED: "secondary",
-    UNDER_REVIEW: "secondary",
+    SUBMITTED: "outline",
+    UNDER_REVIEW: "outline",
     REJECTED: "destructive",
     APPROVED: "default",
     CANCELLED: "destructive",
@@ -46,6 +46,14 @@ const eventStatusVariant = (
     SETTLED: "default",
   };
   return variants[status] || "outline";
+};
+
+const eventStatusClassName = (status: string): string => {
+  const classes: Record<string, string> = {
+    SUBMITTED: "bg-yellow-50 text-yellow-700 border-yellow-200",
+    UNDER_REVIEW: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  };
+  return classes[status] || "";
 };
 
 interface StatusHistoryProps {
@@ -74,7 +82,7 @@ export function StatusHistory({ event }: StatusHistoryProps) {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <Badge variant={eventStatusVariant(history.status)}>
+                  <Badge variant={eventStatusVariant(history.status)} className={eventStatusClassName(history.status)}>
                     {eventStatusLabel(history.status)}
                   </Badge>
                   <span className="text-xs text-slate-500">

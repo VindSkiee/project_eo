@@ -77,6 +77,30 @@ export class FundRequestsService {
   }
 
   // ==========================================
+  // 2b. DETAIL PENGAJUAN DANA (single by ID)
+  // ==========================================
+  async getById(id: string, user: ActiveUserData) {
+    const fundReq = await this.prisma.fundRequest.findUnique({
+      where: { id },
+      include: {
+        requesterGroup: { select: { id: true, name: true, type: true } },
+        targetGroup: { select: { id: true, name: true, type: true } },
+        createdBy: { select: { fullName: true } },
+        approvedBy: { select: { fullName: true } },
+        event: { select: { id: true, title: true, status: true } },
+      },
+    });
+    if (!fundReq) throw new NotFoundException('Pengajuan dana tidak ditemukan');
+    if (
+      user.communityGroupId !== fundReq.requesterGroupId &&
+      user.communityGroupId !== fundReq.targetGroupId
+    ) {
+      throw new ForbiddenException('Tidak memiliki akses ke pengajuan dana ini');
+    }
+    return fundReq;
+  }
+
+  // ==========================================
   // 3. SETUJUI DANA TAMBAHAN (RW -> Transfer ke RT)
   // ==========================================
   async approveExtraFunds(fundRequestId: string, user: ActiveUserData) {
@@ -104,28 +128,52 @@ export class FundRequestsService {
       });
 
       // B. 👇 INTEGRASI FINANCE: PINDAHKAN UANG REAL
-      // Dari Wallet RW (Target) -> Ke Wallet RT (Requester)
-      await this.financeService.transferInterGroup(
-        fundReq.targetGroupId,    // Pengirim (RW)
-        fundReq.requesterGroupId, // Penerima (RT)
-        Number(fundReq.amount),   // Nominal
-        `Penyetujuan Dana Tambahan: ${fundReq.description}`
-      );
-      
-      console.log(`[SYSTEM] Transfer Rp${fundReq.amount} dari RW ke RT berhasil.`);
+      if (fundReq.eventId) {
+        // Terkait event: uang dari RW langsung dicairkan ke event (kas RT tidak bertambah)
+        await this.financeService.transferAndDisburseForEvent(
+          fundReq.targetGroupId,    // Pengirim (RW)
+          fundReq.requesterGroupId, // Penerima/Event group (RT)
+          Number(fundReq.amount),
+          `Penyetujuan Dana Tambahan: ${fundReq.description}`,
+          fundReq.eventId,
+        );
+        console.log(`[SYSTEM] Dana tambahan Rp${fundReq.amount} dari RW langsung dicairkan ke event ${fundReq.eventId}.`);
+      } else {
+        // Tidak terkait event: transfer biasa ke kas RT
+        await this.financeService.transferInterGroup(
+          fundReq.targetGroupId,    // Pengirim (RW)
+          fundReq.requesterGroupId, // Penerima (RT)
+          Number(fundReq.amount),
+          `Penyetujuan Dana Tambahan: ${fundReq.description}`
+        );
+        console.log(`[SYSTEM] Transfer Rp${fundReq.amount} dari RW ke RT berhasil.`);
+      }
 
-      // C. Catat di riwayat acara (Jika ada)
+      // C. Update status event ke FUNDED dan catat riwayat (jika terkait acara)
       if (fundReq.eventId) {
         const currentEvent = await tx.event.findUnique({ where: { id: fundReq.eventId } });
         if (currentEvent) {
+          // Jika event masih UNDER_REVIEW (menunggu dana tambahan), kembalikan ke FUNDED
+          const newStatus =
+            currentEvent.status === EventStatus.UNDER_REVIEW
+              ? EventStatus.FUNDED
+              : currentEvent.status;
+
+          if (newStatus !== currentEvent.status) {
+            await tx.event.update({
+              where: { id: fundReq.eventId },
+              data: { status: newStatus },
+            });
+          }
+
           await tx.eventStatusHistory.create({
             data: {
               eventId: fundReq.eventId,
               changedById: user.id,
               previousStatus: currentEvent.status,
-              newStatus: currentEvent.status,
-              reason: `Pengajuan dana tambahan sebesar Rp${fundReq.amount} telah disetujui oleh RW.`
-            }
+              newStatus,
+              reason: `Pengajuan dana tambahan sebesar Rp${fundReq.amount} telah disetujui oleh Bendahara RW. Dana telah dicairkan.`,
+            },
           });
         }
       }
@@ -195,12 +243,18 @@ export class FundRequestsService {
         return { message: 'Dana ditolak dan Acara berhasil DIBATALKAN.' };
 
       } else if (dto.rwDecision === RwTakeoverDecision.CONTINUE_WITH_ORIGINAL) {
+        // Dana ditolak tapi acara tetap lanjut → kembalikan event ke FUNDED
+        await tx.event.update({
+          where: { id: fundReq.eventId },
+          data: { status: EventStatus.FUNDED },
+        });
+
         await tx.eventStatusHistory.create({
           data: {
             eventId: fundReq.eventId,
             changedById: user.id,
             previousStatus: fundReq.event.status,
-            newStatus: fundReq.event.status,
+            newStatus: EventStatus.FUNDED,
             reason: `[DANA DITOLAK]: ${dto.reason}. RW memerintahkan acara TETAP BERJALAN dengan anggaran awal.`
           }
         });

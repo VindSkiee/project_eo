@@ -29,6 +29,10 @@ interface ActionRequiredProps {
   // Pending fund requests (general)
   pendingFundRequests: FundRequest[];
   loading: boolean;
+  /** Base URL segment for event detail links, e.g. "events" or "events-bendahara" */
+  eventBasePath?: string;
+  /** Path for the fund requests / kas page */
+  fundRequestsPath?: string;
 }
 
 export function ActionRequired({
@@ -37,6 +41,8 @@ export function ActionRequired({
   eventsUnderReview,
   pendingFundRequests,
   loading,
+  eventBasePath = "events",
+  fundRequestsPath = "/dashboard/kas",
 }: ActionRequiredProps) {
   const totalActionRequired =
     eventsNeedingReview.length +
@@ -88,7 +94,7 @@ export function ActionRequired({
       title: `${eventsNeedingReview.length} acara menunggu persetujuan Anda`,
       subtitle: "Segera review dan setujui/tolak pengajuan acara berikut.",
       items: eventsNeedingReview,
-      itemLink: (ev) => `/dashboard/events/${ev.id}`,
+      itemLink: (ev) => `/dashboard/${eventBasePath}/${ev.id}`,
       itemSub: (ev) => formatRupiah(Number(ev.budgetEstimated)),
       buttonColor: "linear-gradient(135deg, #f59e0b, #d97706)",
       buttonShadow: "0 2px 8px rgba(245,158,11,0.4)",
@@ -101,7 +107,7 @@ export function ActionRequired({
       title: `${eventsFunded.length} acara perlu laporan pengeluaran`,
       subtitle: "Dana sudah dicairkan. Input daftar belanja dan bukti nota.",
       items: eventsFunded,
-      itemLink: (ev) => `/dashboard/events/${ev.id}`,
+      itemLink: (ev) => `/dashboard/${eventBasePath}/${ev.id}`,
       itemSub: (ev) => formatRupiah(Number(ev.budgetEstimated)),
       buttonColor: "linear-gradient(135deg, #3b82f6, #2563eb)",
       buttonShadow: "0 2px 8px rgba(59,130,246,0.4)",
@@ -114,7 +120,7 @@ export function ActionRequired({
       title: `${eventsUnderReview.length} pengajuan dana tambahan menunggu review`,
       subtitle: "RT mengajukan dana tambahan untuk acara. Segera tinjau dan proses.",
       items: eventsUnderReview,
-      itemLink: (ev) => `/dashboard/events/${ev.id}`,
+      itemLink: (ev) => `/dashboard/${eventBasePath}/${ev.id}`,
       itemSub: (ev) => {
         const pending = ev.fundRequests?.find((fr) => fr.status === "PENDING");
         return pending ? formatRupiah(Number(pending.amount)) : undefined;
@@ -267,7 +273,7 @@ export function ActionRequired({
                 </p>
               </div>
             </div>
-            <Link to="/dashboard/kas">
+            <Link to={fundRequestsPath}>
               <button
                 className="group flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 hover:gap-2"
                 style={{

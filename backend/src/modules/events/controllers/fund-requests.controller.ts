@@ -47,9 +47,21 @@ export class FundRequestsController {
   }
 
   // ==========================================
-  // 3. SETUJUI DANA TAMBAHAN (RW)
+  // 2b. DETAIL PENGAJUAN DANA (single)
   // ==========================================
-  @Roles(SystemRoleType.TREASURER, SystemRoleType.LEADER) // Bendahara / Ketua RW
+  @Roles(SystemRoleType.ADMIN, SystemRoleType.TREASURER, SystemRoleType.LEADER)
+  @Get(':id')
+  async getFundRequestById(
+    @Param('id') fundRequestId: string,
+    @ActiveUser() user: ActiveUserData
+  ) {
+    return this.fundRequestsService.getById(fundRequestId, user);
+  }
+
+  // ==========================================
+  // 3. SETUJUI DANA TAMBAHAN (RW) — hanya TREASURER
+  // ==========================================
+  @Roles(SystemRoleType.TREASURER) // Hanya Bendahara RW
   @Post(':id/approve')
   @HttpCode(HttpStatus.OK)
   async approveFundRequest(
@@ -60,9 +72,9 @@ export class FundRequestsController {
   }
 
   // ==========================================
-  // 4. TOLAK & AMBIL KEPUTUSAN (TAKEOVER OLEH RW)
+  // 4. TOLAK & AMBIL KEPUTUSAN (TAKEOVER OLEH RW) — hanya TREASURER
   // ==========================================
-  @Roles(SystemRoleType.TREASURER, SystemRoleType.LEADER) // Bendahara / Ketua RW
+  @Roles(SystemRoleType.TREASURER) // Hanya Bendahara RW
   @Post(':id/reject')
   @HttpCode(HttpStatus.OK)
   async rejectFundRequest(

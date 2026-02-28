@@ -43,7 +43,45 @@ export function ChildrenDuesTable({ children }: ChildrenDuesTableProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="rounded-lg border">
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-slate-100 rounded-lg border overflow-hidden">
+          {children.map((child) => (
+            <div key={child.group.id} className="px-4 py-3.5 space-y-2.5 bg-white">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-slate-800 text-sm">{child.group.name}</span>
+                <Badge variant="outline" className="text-xs shrink-0">{child.group.type}</Badge>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Nominal</span>
+                <span className="text-sm font-medium text-slate-800">
+                  {child.duesRule ? formatRupiah(child.duesRule.amount) : "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Jatuh Tempo</span>
+                <span className="text-sm text-slate-600">
+                  {child.duesRule ? `Tgl ${child.duesRule.dueDay}` : "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Status</span>
+                {child.duesRule ? (
+                  <Badge variant={child.duesRule.isActive ? "default" : "secondary"} className="text-xs">
+                    {child.duesRule.isActive ? "Aktif" : "Nonaktif"}
+                  </Badge>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs text-amber-600">
+                    <AlertCircle className="h-3 w-3" />
+                    Belum diatur
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop Table View */}
+        <div className="hidden md:block rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>

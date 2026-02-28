@@ -196,6 +196,8 @@ export default function FinanceDashboard() {
         eventsUnderReview={eventsUnderReview}
         pendingFundRequests={pendingFR}
         loading={loading}
+        eventBasePath="events-bendahara"
+        fundRequestsPath="/dashboard/kas-bendahara"
       />
 
       {/* Summary Cards */}

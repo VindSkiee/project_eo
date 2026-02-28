@@ -43,15 +43,15 @@ const seedAccounts: Account[] = [
 const getRoleBadgeColor = (roleType: string) => {
     switch (roleType) {
         case "LEADER":
-            return "bg-purple-100 text-purple-700";
+            return "bg-indigo-100 text-indigo-700";
         case "ADMIN":
             return "bg-blue-100 text-blue-700";
         case "TREASURER":
-            return "bg-green-100 text-green-700";
+            return "bg-amber-100 text-amber-700";
         case "RESIDENT":
-            return "bg-gray-100 text-gray-700";
+            return "bg-slate-100 text-slate-700";
         default:
-            return "bg-gray-100 text-gray-700";
+            return "bg-slate-100 text-slate-700";
     }
 };
 

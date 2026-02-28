@@ -70,17 +70,25 @@ export interface FundRequest {
   description: string;
   status: string;
   reason?: string;
+  notes?: string;
+  approvedAmount?: number;
   eventId?: string;
   event?: {
+    id?: string;
     title: string;
+    status?: string;
   };
-  communityGroupId: number;
-  communityGroup?: {
-    name: string;
-  };
-  requestedBy?: {
-    fullName: string;
-  };
+  // Backend field names (from getRequestsByGroup / getById include)
+  requesterGroupId?: number;
+  targetGroupId?: number;
+  requesterGroup?: { id?: number; name: string; type?: string };
+  targetGroup?: { id?: number; name: string; type?: string };
+  createdBy?: { fullName: string };
+  approvedBy?: { fullName: string };
+  // Legacy/fallback aliases kept for backward compat
+  communityGroupId?: number;
+  communityGroup?: { name: string };
+  requestedBy?: { fullName: string };
   createdAt: string;
   updatedAt: string;
 }

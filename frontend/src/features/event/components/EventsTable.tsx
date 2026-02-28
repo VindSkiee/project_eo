@@ -3,31 +3,8 @@ import { Badge } from "@/shared/ui/badge";
 import { CalendarDays } from "lucide-react";
 import { DataTable, type ColumnDef } from "@/shared/components/DataTable";
 import { formatRupiah, formatDate } from "@/shared/helpers/formatters";
+import { getEventStatusInfo } from "@/shared/helpers/statusConfig";
 import type { EventItem } from "@/shared/types";
-import type { EventStatusType } from "@/features/event/types";
-
-const statusConfig: Record<
-  EventStatusType,
-  { label: string; className: string }
-> = {
-  DRAFT: { label: "Draft", className: "bg-slate-100 text-slate-600 border-slate-200" },
-  SUBMITTED: { label: "Diajukan", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  UNDER_REVIEW: { label: "Dalam Review", className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
-  APPROVED: { label: "Disetujui", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  REJECTED: { label: "Ditolak", className: "bg-red-50 text-red-700 border-red-200" },
-  CANCELLED: { label: "Dibatalkan", className: "bg-rose-50 text-rose-700 border-rose-200" },
-  FUNDED: { label: "Didanai", className: "bg-blue-50 text-blue-700 border-blue-200" },
-  ONGOING: { label: "Berlangsung", className: "bg-purple-50 text-purple-700 border-purple-200" },
-  COMPLETED: { label: "Selesai", className: "bg-teal-50 text-teal-700 border-teal-200" },
-  SETTLED: { label: "Diselesaikan", className: "bg-green-50 text-green-700 border-green-200" },
-};
-
-function getStatusInfo(status: string) {
-  return statusConfig[status as EventStatusType] || {
-    label: status,
-    className: "bg-slate-50 text-slate-600 border-slate-200",
-  };
-}
 
 interface EventsTableProps {
   events: EventItem[];
@@ -136,7 +113,7 @@ export function EventsTable({
       header: "Status",
       cellClassName: "text-center", // Memastikan status badge ada di tengah
       render: (event) => {
-        const sc = getStatusInfo(event.status);
+        const sc = getEventStatusInfo(event.status);
         return (
           <Badge variant="outline" className={`text-xs px-2.5 py-0.5 ${sc.className}`}>
             {sc.label}
@@ -152,7 +129,7 @@ export function EventsTable({
       {/* Mobile Cards */}
       <div className="block md:hidden space-y-3">
         {events.map((event) => {
-          const sc = getStatusInfo(event.status);
+          const sc = getEventStatusInfo(event.status);
           return (
             <div
               key={event.id}
@@ -167,13 +144,10 @@ export function EventsTable({
                   {sc.label}
                 </Badge>
               </div>
-              <p className="text-xs text-slate-500 line-clamp-1 mb-3">
-                {event.description}
-              </p>
               <div className="flex items-center justify-between text-xs text-slate-500">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-1.5">
-                    <span>{event.createdBy?.fullName || "—"}</span>
+                    <span className="text-xs">dibuat oleh {event.createdBy?.fullName || "—"}</span>
                     {currentUserId && event.createdById === currentUserId && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-200">
                         Saya

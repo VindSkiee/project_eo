@@ -113,7 +113,46 @@ export function DataTable<T>({
     // ── Table ────────────────────────────────────────────────────────
     return (
         <div className={cn("w-full overflow-hidden rounded-2xl border-0 ring-1 ring-slate-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] bg-white", className)}>
-            <div className="overflow-x-auto">
+
+            {/* ── Mobile Card View (< md) ──────────────────────────── */}
+            <div className="md:hidden divide-y divide-slate-100">
+                {data.map((item, idx) => (
+                    <div
+                        key={keyExtractor(item)}
+                        className={cn(
+                            "px-4 py-4 space-y-2.5",
+                            onRowClick && "cursor-pointer hover:bg-slate-50/80 active:bg-slate-100 transition-colors",
+                            rowClassName?.(item, idx),
+                        )}
+                        onClick={onRowClick ? () => onRowClick(item) : undefined}
+                    >
+                        {showRowNumber && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">No.</span>
+                                <div className="inline-flex items-center justify-center h-6 w-6 rounded-md bg-slate-100/50 text-[11px] font-medium text-slate-500">
+                                    {rowNumberPadded ? (idx + 1).toString().padStart(2, "0") : idx + 1}
+                                </div>
+                            </div>
+                        )}
+                        {columns.map((col) => {
+                            const alignment = col.align ?? "left";
+                            return (
+                                <div key={col.key} className="flex items-start justify-between gap-3">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 shrink-0 pt-0.5 min-w-[90px]">
+                                        {col.header}
+                                    </span>
+                                    <div className={cn("text-sm flex-1", ALIGN_CLASS[alignment], col.cellClassName)}>
+                                        {col.render(item, idx)}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ))}
+            </div>
+
+            {/* ── Desktop Table View (≥ md) ────────────────────────── */}
+            <div className="hidden md:block overflow-x-auto">
                 <Table className="w-full text-sm border-collapse">
                     <TableHeader>
                         <TableRow className="border-b border-slate-100 bg-slate-50/50 hover:bg-slate-50/50">

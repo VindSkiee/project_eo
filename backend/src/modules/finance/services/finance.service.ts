@@ -131,7 +131,7 @@ export class FinanceService {
   // ==========================================
   // 6. TRANSFER ANTAR GRUP (RT ke RW atau sebaliknya)
   // ==========================================
-  // Dipanggil saat FundRequest disetujui
+  // Dipanggil saat FundRequest disetujui (tanpa event)
   async transferInterGroup(sourceGroupId: number, targetGroupId: number, amount: number, description: string) {
     const sourceWallet = await this.getWalletDetails(sourceGroupId);
     const targetWallet = await this.getWalletDetails(targetGroupId);
@@ -157,6 +157,62 @@ export class FinanceService {
         amount: amount,
         type: TransactionType.CREDIT,
         description: `Transfer Masuk dari ${sourceWallet.communityGroup.name}: ${description}`,
+      });
+    });
+  }
+
+  // ==========================================
+  // 7. TRANSFER ANTAR GRUP + LANGSUNG CAIR KE EVENT
+  // ==========================================
+  // Dipanggil saat FundRequest EVENT disetujui:
+  // RW DEBIT → uang masuk ke kas RT (ditag eventId) → langsung DEBIT lagi ke event
+  // Net effect pada kas RT = 0; event mendapat tambahan dana
+  async transferAndDisburseForEvent(
+    sourceGroupId: number, // RW
+    targetGroupId: number, // RT
+    amount: number,
+    description: string,
+    eventId: string,
+  ) {
+    const sourceWallet = await this.getWalletDetails(sourceGroupId);
+    const targetWallet = await this.getWalletDetails(targetGroupId);
+
+    if (Number(sourceWallet.balance) < amount) {
+      throw new BadRequestException(
+        `Gagal transfer: Saldo ${sourceWallet.communityGroup.name} tidak mencukupi.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Potong saldo RW (DEBIT) — transfer keluar
+      await this.financeRepo.updateWalletBalance(tx, sourceWallet.id, amount, TransactionType.DEBIT);
+      await this.financeRepo.createTransactionRecord(tx, {
+        walletId: sourceWallet.id,
+        amount,
+        type: TransactionType.DEBIT,
+        description: `Transfer Keluar ke ${targetWallet.communityGroup.name}: ${description}`,
+        eventId,
+      });
+
+      // 2. Catat penerimaan di kas RT (CREDIT, ditag eventId) — untuk jejak audit
+      await this.financeRepo.updateWalletBalance(tx, targetWallet.id, amount, TransactionType.CREDIT);
+      await this.financeRepo.createTransactionRecord(tx, {
+        walletId: targetWallet.id,
+        amount,
+        type: TransactionType.CREDIT,
+        description: `Dana Tambahan Diterima dari ${sourceWallet.communityGroup.name}: ${description}`,
+        eventId,
+      });
+
+      // 3. Langsung cair ke event dari kas RT (DEBIT, ditag eventId)
+      // Net kas RT = 0; uang masuk langsung dialokasikan ke acara
+      await this.financeRepo.updateWalletBalance(tx, targetWallet.id, amount, TransactionType.DEBIT);
+      await this.financeRepo.createTransactionRecord(tx, {
+        walletId: targetWallet.id,
+        amount,
+        type: TransactionType.DEBIT,
+        description: `Pencairan Dana Tambahan untuk Acara: ${description}`,
+        eventId,
       });
     });
   }

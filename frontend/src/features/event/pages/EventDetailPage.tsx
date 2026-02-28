@@ -668,8 +668,6 @@ export default function EventDetailPage() {
 
       {/* ====================== Dialogs ====================== */}
 
-      {/* ====================== Dialogs ====================== */}
-
       {/* Edit Dialog */}
       {showEditDialog && event && (
         <EditEventDialog

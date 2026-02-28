@@ -52,6 +52,7 @@ export default function DashboardLayout() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [roleLabel, setRoleLabel] = useState("");
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Helper to read user from localStorage
   const readUser = () => {
@@ -139,7 +140,7 @@ export default function DashboardLayout() {
   const menuItems = getMenuItems(user?.role);
 
   // 4. Sidebar Content (Glass Sidebar - Shared Desktop & Mobile)
-  const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => {
+  const SidebarContent = ({ collapsed = false, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) => {
     const avatarUrl = getAvatarUrl(user?.profileImage);
     return (
       <>
@@ -200,7 +201,7 @@ export default function DashboardLayout() {
               const isActive = location.pathname.includes(item.path);
               const Icon = item.icon;
               return (
-                <Link key={item.path} to={item.path}>
+                <Link key={item.path} to={item.path} onClick={() => onNavigate?.()}>
                   <div
                     className={`relative flex items-center gap-4 rounded-xl transition-all duration-200 font-medium text-[14px] leading-[20px] ${collapsed ? 'px-3 py-[14px] justify-center' : 'px-4 py-[14px]'}
                     ${isActive
@@ -283,28 +284,31 @@ export default function DashboardLayout() {
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
 
         {/* Mobile Header with Menu Button */}
-        <header className="md:hidden sticky top-0 z-40 flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-md border-b border-slate-200/60">
-          <Sheet>
+        <header className="md:hidden sticky top-0 z-40 flex items-center gap-3 px-4 py-3 bg-primary/90 backdrop-blur-xl border-b border-white/10 shadow-[0px_4px_24px_rgba(7,44,82,0.25)]">
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="shrink-0 text-primary hover:text-primary hover:bg-slate-100">
+              <Button variant="ghost" size="icon" className="shrink-0 text-white hover:text-white hover:bg-white/10">
                 <Menu className="h-6 w-6" />
               </Button>
             </SheetTrigger>
             {/* Glass Sidebar Mobile */}
-            <SheetContent side="left" className="w-[280px] p-0 border-r-0 bg-transparent shadow-none [&>button]:text-white/80">
-              <div className="h-full m-3 backdrop-blur-[80px] bg-primary/90 rounded-[28px] shadow-[0px_24px_64px_-16px_rgba(7,44,82,0.3)] flex flex-col overflow-hidden">
-                <SidebarContent collapsed={false} />
+            <SheetContent
+              side="left"
+              className="w-[280px] p-0 border-r-0 bg-transparent shadow-none [&>button]:text-white/80 [&>button]:bg-white/10 [&>button]:hover:bg-white/20 [&>button]:hover:text-white [&>button]:rounded-full [&>button]:w-8 [&>button]:h-8 [&>button]:flex [&>button]:items-center [&>button]:justify-center [&>button]:top-5 [&>button]:right-5 [&>button]:transition-all [&>button]:duration-200"
+            >
+              <div className="h-full m-3 backdrop-blur-[80px] bg-primary/20 rounded-[28px] shadow-[0px_24px_64px_-16px_rgba(7,44,82,0.3)] flex flex-col overflow-hidden">
+                <SidebarContent collapsed={false} onNavigate={() => setMobileOpen(false)} />
               </div>
             </SheetContent>
           </Sheet>
           <div className="flex-1 min-w-0">
-            <h1 className="text-base font-semibold font-poppins text-slate-900 truncate">
+            <h1 className="text-base font-semibold font-poppins text-white truncate">
               {menuItems.find(item => location.pathname.includes(item.path))?.title || "Dashboard"}
             </h1>
           </div>
-          <Avatar className="h-8 w-8 border border-slate-200">
+          <Avatar className="h-8 w-8 border border-white/20">
             {getAvatarUrl(user?.profileImage) && <AvatarImage src={getAvatarUrl(user?.profileImage)!} alt={user?.fullName || "Avatar"} className="object-cover" />}
-            <AvatarFallback className="bg-primary/10 text-primary font-bold text-sm font-poppins">
+            <AvatarFallback className="bg-white/10 text-white font-bold text-sm font-poppins">
               {user?.fullName?.charAt(0).toUpperCase() || "U"}
             </AvatarFallback>
           </Avatar>

@@ -3,15 +3,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom"; // 1. IMPORT INI
+import { useNavigate } from "react-router-dom"; 
 
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
-import { Loader2 } from "lucide-react";
+// 1. Tambahkan import Eye dan EyeOff
+import { Loader2, Eye, EyeOff } from "lucide-react"; 
 
-// Pastikan path ini sesuai dengan struktur folder Anda
-// Jika belum ada, buat file dummy atau hapus import ini sementara
 import { authService } from "@/features/auth/services/authService";
 import axios from "axios";
 
@@ -25,8 +24,9 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
+  // 2. Tambahkan state untuk show/hide password
+  const [showPassword, setShowPassword] = useState(false); 
 
-  // 2. INISIALISASI HOOK DISINI (Wajib di dalam component)
   const navigate = useNavigate();
 
   const {
@@ -37,15 +37,12 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
-  // Fungsi Login
   const onValid = async (data: LoginFormValues) => {
     setIsLoading(true);
 
     try {
       const result = await authService.login(data.email, data.password);
 
-      // HANYA simpan data user (sebagai flag UI). 
-      // Token-nya sudah otomatis masuk ke dalam Cookie browser!
       localStorage.setItem("user", JSON.stringify(result.user));
 
       toast.success("Login Berhasil!", {
@@ -53,7 +50,6 @@ export default function LoginPage() {
         duration: 2000,
       });
 
-      // Redirect Pintar Sesuai Role
       const role = result.user.role;
       if (role === "LEADER") navigate("/dashboard/rw");
       else if (role === "ADMIN") navigate("/dashboard/rt");
@@ -61,12 +57,9 @@ export default function LoginPage() {
       else navigate("/dashboard/warga");
 
     } catch (error: any) {
-      // ... kode error handling tetap sama ...
       let message = "Terjadi kesalahan server.";
 
-      // Handle Error Axios/Backend
       if (axios.isAxiosError(error) && error.response) {
-        // Cek apakah error message berupa array (dari class-validator backend)
         const msg = error.response.data.message;
         message = Array.isArray(msg) ? msg[0] : (msg || message);
       }
@@ -123,13 +116,32 @@ export default function LoginPage() {
             {/* Password Field */}
             <div className="grid gap-2 md:gap-3">
               <Label htmlFor="password" className="text-slate-700 font-medium text-left">Kata Sandi</Label>
-              <Input
-                id="password"
-                type="password"
-                disabled={isLoading}
-                {...register("password")}
-                className={`h-12 bg-white border-slate-300 focus-visible:ring-ring rounded-3xl px-4 ${errors.password ? "border-red-500 focus-visible:ring-red-500" : ""}`}
-              />
+              {/* 3. Bungkus input dengan relative div */}
+              <div className="relative"> 
+                <Input
+                  id="password"
+                  // 4. Ubah tipe dinamis berdasarkan state
+                  type={showPassword ? "text" : "password"} 
+                  disabled={isLoading}
+                  {...register("password")}
+                  // Tambahkan pr-10 agar teks tidak tertutup icon
+                  className={`h-12 bg-white border-slate-300 focus-visible:ring-ring rounded-3xl pl-4 pr-11 w-full ${errors.password ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                />
+                
+                {/* 5. Tambahkan tombol mata absolut di dalam div */}
+                <button
+                  type="button" // Sangat penting agar tidak men-trigger submit form
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  disabled={isLoading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <Button
