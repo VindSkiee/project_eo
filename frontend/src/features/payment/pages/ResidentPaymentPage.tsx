@@ -30,6 +30,7 @@ import {
   ArrowRight,
   FileText,
   AlertTriangle,
+  AlertCircle,
   QrCode,
   RefreshCw,
   Check,
@@ -325,7 +326,17 @@ export default function ResidentPaymentPage() {
     }
   };
 
+  const currentYear = new Date().getFullYear();
   const hasUnpaidBill = bill !== null && bill.totalAmount > 0;
+  const isFullYearPaid =
+    bill !== null &&
+    bill.baseMonthlyAmount > 0 &&
+    bill.nextBillYear > currentYear;
+  const isCurrentMonthPaidAhead =
+    !hasUnpaidBill &&
+    !isFullYearPaid &&
+    bill !== null &&
+    bill.baseMonthlyAmount > 0;
   const pendingPayment = payments.find((p) => p.status === "PENDING" && p.orderId.startsWith("DUES-"));
   const hasPendingPayment = !!pendingPayment;
   const paidCount = payments.filter((p) => p.status === "PAID").length;
@@ -385,11 +396,68 @@ export default function ResidentPaymentPage() {
       {/* === INVOICE / TAGIHAN SECTION === */}
       {loading ? (
         <Skeleton className="h-52 w-full rounded-xl" />
-      ) : hasUnpaidBill ? (
+      ) : (bill === null || bill.baseMonthlyAmount === 0) ? (
+        <Card className="relative overflow-hidden border-0 ring-1 ring-blue-200/60 bg-white shadow-sm rounded-xl">
+          <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-blue-400"></div>
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-500">
+                <AlertCircle className="h-6 w-6" strokeWidth={2.5} />
+              </div>
+              <div>
+                <p className="text-base font-semibold text-slate-900 font-poppins">
+                  Aturan Pembayaran Belum Ditentukan
+                </p>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Pengurus belum mengatur aturan iuran untuk kelompok Anda. Status tagihan tidak tersedia saat ini.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : isFullYearPaid ? (
+        <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50">
+          <CardContent className="py-6 px-6">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-base font-semibold text-emerald-800 font-poppins">Semua Iuran Lunas Untuk Tahun Ini!</p>
+                <p className="text-sm text-emerald-600 mt-0.5">
+                  Seluruh iuran tahun {currentYear} telah dibayar. Tagihan berikutnya akan mulai pada{" "}
+                  <span className="font-semibold">
+                    {MONTH_NAMES_ID[(bill?.nextBillMonth ?? 1) - 1]} {bill?.nextBillYear}
+                  </span>.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (hasUnpaidBill || isCurrentMonthPaidAhead) ? (
         <Card className="rounded-xl shadow-sm bg-slate-100 ">
           <div className="bg-slate-100 p-6 sm:p-8">
+            {/* Info Banner: this month is paid but can pay ahead */}
+            {isCurrentMonthPaidAhead && (
+              <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" strokeWidth={2.5} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-emerald-800 font-poppins">
+                    Iuran Bulan Ini Sudah Lunas
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-0.5 leading-relaxed">
+                    Tidak ada tunggakan saat ini. Anda tetap bisa melunasi iuran bulan-bulan berikutnya di tahun {currentYear} lebih awal.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 mb-4">
-              <p className="text-sm sm:text-base font-semibold text-slate-700 uppercase tracking-wide">Nota Tagihan Iuran</p>
+              <p className="text-sm sm:text-base font-semibold text-slate-700 uppercase tracking-wide">
+                {isCurrentMonthPaidAhead ? "Bayar Iuran di Muka" : "Nota Tagihan Iuran"}
+              </p>
             </div>
 
             {/* Invoice Detail — per-month base amounts */}
@@ -588,23 +656,7 @@ export default function ResidentPaymentPage() {
             </Button>
           </div>
         </Card>
-      ) : (
-        <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50">
-          <CardContent className="py-6 px-6">
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="h-6 w-6 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-base font-semibold text-emerald-800 font-poppins">Semua Iuran Lunas Untuk Tahun Ini!</p>
-                <p className="text-sm text-emerald-600 mt-0.5">
-                  Tidak ada tagihan yang perlu dibayar saat ini.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      ) : null}
 
       {/* === SUMMARY CARDS === */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">

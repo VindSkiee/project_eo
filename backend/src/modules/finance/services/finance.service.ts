@@ -667,6 +667,7 @@ export class FinanceService {
         adminName,
         treasurerName,
         balance: rt.wallet ? Number(rt.wallet.balance) : 0,
+        hasDuesRule: !!(rt as any).duesRule,
         isFullyPaid: isGroupFullyPaid,
         monthlyStatus,
       };

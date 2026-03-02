@@ -10,6 +10,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Loader2, Settings, Lock } from "lucide-react";
+import { emitSidebarUpdate } from "@/shared/helpers/sidebarEvents";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
 import type { DuesRule } from "@/features/finance/types";
@@ -17,11 +18,6 @@ import type { DuesRule } from "@/features/finance/types";
 // Helper: format number to thousand separator (10000 → 10.000)
 function formatThousand(value: number): string {
   return new Intl.NumberFormat("id-ID").format(value);
-}
-
-// Helper: parse formatted string to number (10.000 → 10000)
-function parseThousand(value: string): number {
-  return Number(value.replace(/\./g, "").replace(/,/g, ""));
 }
 
 interface DuesConfigFormProps {
@@ -78,6 +74,7 @@ export function DuesConfigForm({ currentRule, groupName, onSuccess, userRole }: 
         dueDay: numDueDay,
       });
       toast.success("Konfigurasi iuran berhasil disimpan!");
+      emitSidebarUpdate();
       onSuccess();
     } catch (err: unknown) {
       const message =

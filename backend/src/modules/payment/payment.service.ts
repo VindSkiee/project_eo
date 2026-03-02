@@ -446,6 +446,7 @@ export class PaymentService {
       userId: user.id,
       amount: grossAmount,
       grossAmount: grossAmount,
+      monthCount: validMonths,
     });
 
     // 5. SIAPKAN PARAMETER MIDTRANS

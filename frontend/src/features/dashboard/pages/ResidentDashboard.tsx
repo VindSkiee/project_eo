@@ -236,6 +236,25 @@ export default function ResidentDashboard() {
       {/* === MAIN CARDS: Status Tagihan === */}
       {loading ? (
         <Skeleton className="h-32 w-full rounded-2xl" />
+      ) : (bill === null || bill.baseMonthlyAmount === 0) ? (
+        <Card className="relative overflow-hidden border-0 ring-1 ring-blue-200/60 bg-white shadow-sm rounded-2xl">
+          <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-blue-400"></div>
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-500">
+                <AlertCircle className="h-6 w-6" strokeWidth={2.5} />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-slate-900 font-poppins tracking-tight">
+                  Aturan Pembayaran Belum Ditentukan
+                </h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Pengurus belum mengatur aturan iuran untuk kelompok Anda. Status tagihan tidak tersedia saat ini.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       ) : hasUnpaidBill ? (
         <Card className="relative overflow-hidden border-0 ring-1 ring-red-100 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-2xl">
           <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-red-500"></div>

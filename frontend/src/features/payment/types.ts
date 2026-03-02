@@ -6,6 +6,7 @@ export interface PaymentItem {
   userId: string;
   amount: number;
   grossAmount: number;
+  monthCount?: number;
   status: string;
   snapToken?: string;
   redirectUrl?: string;
@@ -19,6 +20,12 @@ export interface PaymentItem {
   user?: {
     fullName: string;
     email: string;
+  };
+  /** Linked to the first paid month (only present on detail endpoint after payment is PAID) */
+  contribution?: {
+    month: number;
+    year: number;
+    amount: number;
   };
 }
 

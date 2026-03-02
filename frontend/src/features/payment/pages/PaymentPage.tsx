@@ -20,7 +20,8 @@ import {
   Info,
   Building2,
   ListFilter,
-  ArrowLeft
+  ArrowLeft,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
@@ -320,35 +321,60 @@ export default function PaymentPage() {
         </div>
       </div>
 
-      <DuesProgressTable
-        isParentLevel={isParentLevel}
-        loading={loading}
-        selectedYear={selectedYear}
-        currentMonth={currentMonth}
-        currentYear={currentYear}
-        parentData={filteredGroups}
-        childData={filteredMembers}
-        isFullyPaidChild={isFullyPaidChild}
-      />
+      {/* === NO DUES RULE: Child Level === */}
+      {!loading && !isParentLevel && childData && !childData.duesRule ? (
+        <Card className="relative overflow-hidden border-0 ring-1 ring-blue-200/60 bg-white shadow-sm rounded-xl">
+          <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-blue-400" />
+          <CardContent className="p-6 sm:p-8">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-500">
+                <AlertCircle className="h-6 w-6" strokeWidth={2.5} />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-slate-900 font-poppins tracking-tight">
+                  Aturan Iuran Belum Diatur
+                </h3>
+                <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                  Daftar warga tidak dapat ditampilkan karena aturan iuran untuk RT ini belum dikonfigurasi.
+                  Harap atur aturan iuran terlebih dahulu melalui menu <span className="font-medium text-slate-700">Pengaturan Keuangan</span>.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <DuesProgressTable
+            isParentLevel={isParentLevel}
+            loading={loading}
+            selectedYear={selectedYear}
+            currentMonth={currentMonth}
+            currentYear={currentYear}
+            parentData={filteredGroups}
+            childData={filteredMembers}
+            isFullyPaidChild={isFullyPaidChild}
+          />
 
-      {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-100">
-        <span className="text-slate-700 mr-2"><Info className="h-4 w-4 inline mr-1" /> Keterangan:</span>
-        {isParentLevel ? (
-          <>
-            <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-emerald-500 shadow-inner" /><span>100% Terkumpul</span></div>
-            <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-amber-400 shadow-inner" /><span>Terkumpul Sebagian</span></div>
-            <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-red-400 shadow-inner" /><span>Nihil (Kosong)</span></div>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-emerald-500 shadow-inner" /><span>Sudah Lunas</span></div>
-            <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-red-400 shadow-inner" /><span>Menunggak</span></div>
-            <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-slate-200 shadow-inner" /><span>Belum Terdaftar</span></div>
-          </>
-        )}
-        <div className="flex items-center gap-1.5 ml-auto sm:ml-4"><div className="w-5 h-1 rounded-full bg-primary" /><span>Bulan Berjalan</span></div>
-      </div>
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <span className="text-slate-700 mr-2"><Info className="h-4 w-4 inline mr-1" /> Keterangan:</span>
+            {isParentLevel ? (
+              <>
+                <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-emerald-500 shadow-inner" /><span>100% Terkumpul</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-amber-400 shadow-inner" /><span>Terkumpul Sebagian</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-red-400 shadow-inner" /><span>Nihil (Kosong)</span></div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-emerald-500 shadow-inner" /><span>Sudah Lunas</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-red-400 shadow-inner" /><span>Menunggak</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-slate-200 shadow-inner" /><span>Belum Terdaftar</span></div>
+              </>
+            )}
+            <div className="flex items-center gap-1.5 ml-auto sm:ml-4"><div className="w-5 h-1 rounded-full bg-primary" /><span>Bulan Berjalan</span></div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

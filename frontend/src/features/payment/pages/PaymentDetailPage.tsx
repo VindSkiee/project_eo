@@ -10,7 +10,6 @@ import { Button } from "@/shared/ui/button";
 import { Separator } from "@/shared/ui/separator";
 import {
   ArrowLeft,
-  Receipt,
   CheckCircle2,
   Clock,
   XCircle,
@@ -18,6 +17,7 @@ import {
   ExternalLink,
   CreditCard,
   Calendar,
+  CalendarDays,
   Hash,
   Wallet,
   User,
@@ -147,6 +147,27 @@ function getProviderLabel(provider?: string): string {
     cstore: "Minimarket",
   };
   return labels[provider || ""] || provider || "-";
+}
+
+const MONTH_NAMES_ID = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+function getMonthRangeLabel(
+  startMonth: number,
+  startYear: number,
+  monthCount: number,
+): { rangeLabel: string; isFullYear: boolean } {
+  let endMonth = startMonth + monthCount - 1;
+  let endYear = startYear;
+  while (endMonth > 12) { endMonth -= 12; endYear += 1; }
+
+  const isFullYear = monthCount === 12;
+  const startLabel = `${MONTH_NAMES_ID[startMonth - 1]} ${startYear}`;
+  const endLabel = `${MONTH_NAMES_ID[endMonth - 1]} ${endYear}`;
+  const rangeLabel = monthCount === 1 ? startLabel : `${startLabel} – ${endLabel}`;
+  return { rangeLabel, isFullYear };
 }
 
 // === MAIN COMPONENT ===
@@ -286,7 +307,6 @@ export default function PaymentDetailPage() {
       <Card>
         <CardContent className="p-5 sm:p-6 space-y-4">
           <div className="flex items-center gap-2 mb-1">
-            <Receipt className="h-4 w-4 text-slate-400" />
             <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
               Informasi Transaksi
             </h3>
@@ -334,6 +354,52 @@ export default function PaymentDetailPage() {
               )}
             </div>
           </div>
+
+          {/* Periode Iuran — only for DUES payments */}
+          {payment.orderId.startsWith("DUES-") && (() => {
+            // Case 1: contribution data available (PAID) — most accurate
+            if (payment.contribution) {
+              const mc = payment.monthCount && payment.monthCount > 1
+                ? payment.monthCount
+                : Math.max(1, Math.round(Number(payment.amount) / Number(payment.contribution.amount)));
+              const { rangeLabel, isFullYear } = getMonthRangeLabel(
+                payment.contribution.month,
+                payment.contribution.year,
+                mc,
+              );
+              return (
+                <div className="flex items-start gap-2.5">
+                  <CalendarDays className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-slate-500">Periode Iuran</p>
+                    <p className="text-sm font-semibold text-slate-900">{rangeLabel}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-xs text-slate-500">{mc} bulan</p>
+                      {isFullYear && (
+                        <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">
+                          Setahun Penuh 🎉
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            // Case 2: monthCount available (PENDING — not yet distributed)
+            if (payment.monthCount && payment.monthCount > 0) {
+              return (
+                <div className="flex items-start gap-2.5">
+                  <CalendarDays className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-slate-500">Periode Iuran</p>
+                    <p className="text-sm font-semibold text-slate-900">{payment.monthCount} bulan</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Periode akan dikonfirmasi setelah pembayaran selesai.</p>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
           <Separator />
 

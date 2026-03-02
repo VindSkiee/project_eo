@@ -39,7 +39,7 @@ export function ChildrenDuesTable({ children }: ChildrenDuesTableProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg font-poppins">
           <Building2 className="h-5 w-5 text-primary" />
-          Iuran Grup Anak
+          Iuran RT
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -85,23 +85,21 @@ export function ChildrenDuesTable({ children }: ChildrenDuesTableProps) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">#</TableHead>
                 <TableHead>Nama Grup</TableHead>
-                <TableHead>Tipe</TableHead>
-                <TableHead className="text-right">Nominal</TableHead>
+                <TableHead className="text-center">Nominal</TableHead>
                 <TableHead className="text-center">Jatuh Tempo</TableHead>
                 <TableHead className="text-center">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {children.map((child) => (
+              {children.map((child, index) => (
                 <TableRow key={child.group.id}>
-                  <TableCell className="font-medium">{child.group.name}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">
-                      {child.group.type}
-                    </Badge>
+                  <TableCell className="text-left font-medium text-slate-500">
+                    {index + 1}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="font-medium">{child.group.name}</TableCell>
+                  <TableCell className="text-center">
                     {child.duesRule
                       ? formatRupiah(child.duesRule.amount)
                       : "—"}

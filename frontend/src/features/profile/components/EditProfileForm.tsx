@@ -39,22 +39,40 @@ export function EditProfileForm({ form, onChange, onSave, saving }: EditProfileF
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="profile-phone">Nomor Telepon</Label>
+            <Label htmlFor="profile-phone" className="flex items-center gap-2">
+              Nomor Telepon
+              {!form.phone.trim() && (
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm">!</span>
+              )}
+            </Label>
             <Input
               id="profile-phone"
               value={form.phone}
               onChange={(e) => onChange({ ...form, phone: e.target.value })}
               placeholder="08xxxxxxxxxx"
+              className={!form.phone.trim() ? "border-red-300 focus-visible:ring-red-400" : ""}
             />
+            {!form.phone.trim() && (
+              <p className="text-xs text-red-500">Nomor telepon belum diisi.</p>
+            )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="profile-address">Alamat</Label>
+            <Label htmlFor="profile-address" className="flex items-center gap-2">
+              Alamat
+              {!form.address.trim() && (
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm">!</span>
+              )}
+            </Label>
             <Input
               id="profile-address"
               value={form.address}
               onChange={(e) => onChange({ ...form, address: e.target.value })}
               placeholder="Masukkan alamat"
+              className={!form.address.trim() ? "border-red-300 focus-visible:ring-red-400" : ""}
             />
+            {!form.address.trim() && (
+              <p className="text-xs text-red-500">Alamat belum diisi.</p>
+            )}
           </div>
         </div>
         <div className="flex justify-end">

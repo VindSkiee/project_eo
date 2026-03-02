@@ -242,6 +242,7 @@ model PaymentGatewayTx {
   midtransId     String?               @unique
   amount         Decimal               @db.Decimal(15, 2)
   grossAmount    Decimal               @db.Decimal(15, 2)
+  monthCount     Int                   @default(1)
   status         PaymentGatewayStatus  @default(PENDING)
   methodCategory PaymentMethodCategory
   providerCode   String?

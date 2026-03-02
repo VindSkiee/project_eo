@@ -22,6 +22,7 @@ export class PaymentRepository {
     userId: string;
     amount: number;
     grossAmount: number;
+    monthCount?: number;
     methodCategory?: PaymentMethodCategory;
   }) {
     return this.prisma.paymentGatewayTx.create({
@@ -30,6 +31,7 @@ export class PaymentRepository {
         userId: data.userId,
         amount: data.amount,
         grossAmount: data.grossAmount,
+        monthCount: data.monthCount ?? 1,
         status: PaymentGatewayStatus.PENDING,
         // Default category, akan di-update saat user memilih metode di popup Snap
         methodCategory: data.methodCategory || PaymentMethodCategory.VIRTUAL_ACCOUNT, 
@@ -61,6 +63,7 @@ export class PaymentRepository {
       where: { id: paymentId },
       include: {
         user: { select: { fullName: true, email: true } },
+        contribution: { select: { month: true, year: true, amount: true } },
       },
     });
   }

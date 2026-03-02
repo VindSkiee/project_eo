@@ -202,6 +202,7 @@ export class FinanceRepository {
             id: true,
             name: true,
             wallet: { select: { balance: true } },
+            duesRule: { select: { amount: true, dueDay: true, isActive: true } },
             // Ambil semua user aktif beserta role dan history iurannya
             users: {
               where: { isActive: true },

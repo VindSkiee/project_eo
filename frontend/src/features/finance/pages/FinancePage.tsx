@@ -124,6 +124,9 @@ export default function FinancePage() {
   const [frSubmitting, setFrSubmitting] = useState(false);
   const [events, setEvents] = useState<EventItem[]>([]);
 
+  // Dues rule badge – check if config missing
+  const [duesNotConfigured, setDuesNotConfigured] = useState(false);
+
   // Role-aware paths
   // Role-aware paths
   const showDuesConfig = userRole !== "TREASURER";
@@ -140,6 +143,14 @@ export default function FinancePage() {
   useEffect(() => {
     fetchData();
     if (canCreateFundRequest) fetchEvents();
+    if (showDuesConfig) {
+      financeService.getDuesConfig()
+        .then((cfg) => {
+          // Only badge for OWN duesRule — user can only configure their own level
+          setDuesNotConfigured(!cfg.duesRule);
+        })
+        .catch(() => { /* non-critical */ });
+    }
   }, []);
 
   // Fetch children wallets after wallet is loaded (so we know if RW-level)
@@ -362,10 +373,13 @@ export default function FinancePage() {
           {showDuesConfig && (
             <Button
               onClick={() => navigate(duesConfigPath)}
-              className="gap-2"
+              className="gap-2 relative"
             >
               <Settings className="h-4 w-4" />
               <span className="hidden sm:inline">Atur Pembayaran</span>
+              {duesNotConfigured && (
+                <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-lg ring-2 ring-white">!</span>
+              )}
             </Button>
           )}
         </div>

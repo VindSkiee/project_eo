@@ -7,7 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/shared/ui/tooltip";
-import { Users, Wallet, Building2, Smartphone } from "lucide-react";
+import { Users, Wallet, Building2, Smartphone, AlertCircle } from "lucide-react";
 import type { DuesProgressMember } from "@/shared/types";
 import { useNavigate } from "react-router-dom";
 
@@ -18,6 +18,7 @@ export interface GroupProgressSummary {
   adminName: string;
   treasurerName: string;
   balance: number;
+  hasDuesRule: boolean;
   monthlyStatus: Array<"PAID" | "PARTIAL" | "UNPAID" | "FUTURE" | "NOT_REGISTERED">;
   isFullyPaid: boolean;
 }
@@ -216,6 +217,34 @@ function ParentRow({ group, index }: { group: GroupProgressSummary; index: numbe
   const role: string = user.role || "";
   const targetPath = role === "TREASURER" ? `/dashboard/progres-iuran-bendahara/${group.id}` : `/dashboard/progres-iuran/${group.id}`;
 
+  if (!group.hasDuesRule) {
+    return (
+      <tr className="bg-slate-50/80 opacity-75">
+        <td className="text-center py-4 px-4 text-slate-400 text-sm">{index}</td>
+        <td className="py-4 px-4">
+          <div className="min-w-0">
+            <p className="font-bold text-slate-500 text-sm">{group.name}</p>
+            <div className="flex flex-col gap-0.5 mt-1 text-[11px] text-slate-400">
+              <span className="flex items-center gap-1"><Users className="h-3 w-3" /> Admin: {group.adminName}</span>
+              <span className="flex items-center gap-1"><Wallet className="h-3 w-3" /> Kas: <span className="font-semibold text-slate-400">{formatRupiah(group.balance)}</span></span>
+            </div>
+          </div>
+        </td>
+        <td colSpan={12} className="py-4 px-4 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <AlertCircle className="h-4 w-4 text-blue-400 shrink-0" />
+            <span className="text-xs text-slate-500">Aturan iuran belum diatur untuk RT ini</span>
+          </div>
+        </td>
+        <td className="py-4 px-4 text-center">
+          <Badge variant="outline" className="text-[10px] text-slate-500 border-slate-300 cursor-default">
+            Belum Diatur
+          </Badge>
+        </td>
+      </tr>
+    );
+  }
+
   return (
     <tr onClick={() => navigate(targetPath)} className="hover:bg-slate-50 transition-colors group cursor-pointer">
       <td className="text-center py-4 px-4 text-slate-400 text-sm">{index}</td>
@@ -300,6 +329,27 @@ function ParentMobileCard({ group }: { group: GroupProgressSummary }) {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const targetPath = user.role === "TREASURER" ? `/dashboard/progres-iuran-bendahara/${group.id}` : `/dashboard/progres-iuran/${group.id}`;
+
+  if (!group.hasDuesRule) {
+    return (
+      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-3 opacity-75">
+        <div className="flex justify-between items-start gap-2">
+          <div>
+            <h4 className="font-bold text-slate-500 text-sm">{group.name}</h4>
+            <div className="flex flex-col gap-0.5 mt-1.5 text-xs text-slate-400">
+              <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" /> Admin: {group.adminName}</span>
+              <span className="flex items-center gap-1"><Wallet className="h-3.5 w-3.5" /> Kas: <span className="font-semibold text-slate-400">{formatRupiah(group.balance)}</span></span>
+            </div>
+          </div>
+          <Badge variant="outline" className="text-[10px] shrink-0 text-slate-500 border-slate-300">Belum Diatur</Badge>
+        </div>
+        <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+          <AlertCircle className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+          <span className="text-xs text-blue-700">Aturan iuran belum diatur untuk RT ini</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div 

@@ -13,8 +13,11 @@ import {
   Banknote,
   ArrowRight,
   FileText,
+  AlertCircle,
+  Settings,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { Button } from "@/shared/ui/button";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
 import { eventService } from "@/features/event/services/eventService";
@@ -38,11 +41,13 @@ function formatRupiah(amount: number): string {
 }
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const [wallet, setWallet] = useState<WalletDetail | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [fundRequests, setFundRequests] = useState<FundRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [duesRuleNotSet, setDuesRuleNotSet] = useState(false);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -77,6 +82,11 @@ export default function AdminDashboard() {
     };
 
     fetchAll();
+
+    // Check dues rule config
+    financeService.getDuesConfig()
+      .then((cfg) => setDuesRuleNotSet(!cfg.duesRule))
+      .catch(() => { /* non-critical */ });
   }, []);
 
   const activeEvents = events.filter(
@@ -98,6 +108,37 @@ export default function AdminDashboard() {
           Kelola warga, kegiatan, dan keuangan RT Anda.
         </p>
       </div>
+
+      {/* Dues Rule Alert */}
+      {loading ? null : duesRuleNotSet && (
+        <Card className="relative overflow-hidden border-0 ring-1 ring-amber-200/60 bg-white shadow-sm rounded-2xl">
+          <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-amber-400"></div>
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="flex items-center gap-4 flex-1">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-500">
+                  <AlertCircle className="h-6 w-6" strokeWidth={2.5} />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 font-poppins tracking-tight">
+                    Aturan Pembayaran Belum Diatur
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-0.5">
+                    Anda belum mengatur aturan iuran untuk RT Anda. Warga belum bisa melihat tagihan.
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={() => navigate("/dashboard/pengaturan-iuran")}
+                className="gap-2 shrink-0"
+              >
+                <Settings className="h-4 w-4" />
+                Atur Sekarang
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">

@@ -55,6 +55,11 @@ export function ProfileHeader({ profile, uploading, onPhotoUpload }: ProfileHead
               </AvatarFallback>
             </Avatar>
 
+            {/* Red dot badge when no profile photo */}
+            {!photoUrl && (
+              <span className="absolute -top-[-10px] -right-[-10px] flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-lg ring-2 ring-white z-10">!</span>
+            )}
+
             {/* Upload Button Badge */}
             <label
               className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-white border border-slate-200 shadow-sm cursor-pointer hover:bg-slate-50 transition-colors group"

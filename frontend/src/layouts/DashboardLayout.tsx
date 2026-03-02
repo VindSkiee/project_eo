@@ -35,6 +35,7 @@ import { authService } from "@/features/auth/services/authService";
 import { getRoleLabel, loadCustomRoleLabels } from "@/shared/helpers/roleLabel";
 import { getAvatarUrl } from "@/shared/helpers/avatarUrl";
 import { onSidebarUpdate, offSidebarUpdate } from "@/shared/helpers/sidebarEvents";
+import { useBadgeNotifications, type BadgeCounts } from "@/shared/hooks/useBadgeNotifications";
 
 // Tipe data user dari LocalStorage
 interface User {
@@ -139,6 +140,49 @@ export default function DashboardLayout() {
 
   const menuItems = getMenuItems(user?.role);
 
+  // 5. Badge notifications
+  const badges = useBadgeNotifications();
+
+  /** Map menu path to badge count */
+  const getBadgeCount = (path: string): number => {
+    // Kegiatan pages
+    if (path.includes("kegiatan")) return badges.events;
+    // Kas & Keuangan pages
+    if (path.includes("kas")) return badges.finance;
+    // Pembayaran pages
+    if (path.includes("pembayaran")) return badges.payment;
+    // Profil
+    if (path.includes("profile")) return badges.profile;
+    return 0;
+  };
+
+  /**
+   * Sub-paths that should highlight a specific parent menu item.
+   * Key = pathname substring, Value = parent menu path substring.
+   * This prevents e.g. /dashboard/pengaturan-iuran from matching "Pengaturan"
+   * instead of "Kas & Keuangan".
+   */
+  const subPathToParent: Record<string, string> = {
+    "pengaturan-iuran": "kas",
+    "progres-iuran": "pembayaran",
+    "detail-progres": "pembayaran",
+  };
+
+  /** Check if a menu item should be active for the current pathname */
+  const isMenuActive = (menuPath: string): boolean => {
+    const pathname = location.pathname;
+
+    // First check if current path is a sub-path that maps to a specific parent
+    for (const [subPath, parentKey] of Object.entries(subPathToParent)) {
+      if (pathname.includes(subPath)) {
+        return menuPath.includes(parentKey);
+      }
+    }
+
+    // Default: simple includes check
+    return pathname.includes(menuPath);
+  };
+
   // 4. Sidebar Content (Glass Sidebar - Shared Desktop & Mobile)
   const SidebarContent = ({ collapsed = false, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) => {
     const avatarUrl = getAvatarUrl(user?.profileImage);
@@ -198,8 +242,9 @@ export default function DashboardLayout() {
           )}
           <nav className="flex flex-col gap-[2px]">
             {menuItems.map((item) => {
-              const isActive = location.pathname.includes(item.path);
+              const isActive = isMenuActive(item.path);
               const Icon = item.icon;
+              const badgeCount = getBadgeCount(item.path);
               return (
                 <Link key={item.path} to={item.path} onClick={() => onNavigate?.()}>
                   <div
@@ -210,7 +255,14 @@ export default function DashboardLayout() {
                       }`}
                     title={collapsed ? item.title : undefined}
                   >
-                    <Icon className="h-[22px] w-[22px] shrink-0" strokeWidth={1.8} />
+                    <div className="relative shrink-0">
+                      <Icon className="h-[22px] w-[22px]" strokeWidth={1.8} />
+                      {badgeCount > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-lg shadow-red-500/30 ring-2 ring-[rgba(7,44,82,0.7)]">
+                          {badgeCount > 9 ? "9+" : badgeCount}
+                        </span>
+                      )}
+                    </div>
                     {!collapsed && <span className="truncate">{item.title}</span>}
                   </div>
                 </Link>
