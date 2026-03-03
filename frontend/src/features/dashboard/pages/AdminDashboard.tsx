@@ -10,20 +10,18 @@ import {
   Users,
   CalendarDays,
   Wallet,
-  Banknote,
-  ArrowRight,
   FileText,
   AlertCircle,
   Settings,
 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/shared/ui/button";
 import { toast } from "sonner";
 import { financeService } from "@/features/finance/services/financeService";
 import { eventService } from "@/features/event/services/eventService";
 import { userService } from "@/shared/services/userService";
 import { fundRequestService } from "@/features/finance/services/fundRequestService";
-import { RecentEventsCard } from "@/features/dashboard/components";
+import { RecentEventsCard, QuickLinks } from "@/features/dashboard/components";
 import type {
   WalletDetail,
   EventItem,
@@ -211,49 +209,7 @@ export default function AdminDashboard() {
         eventDetailBasePath="/dashboard/events-rt"
       />
 
-      {/* Quick Links */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          {
-            to: "/dashboard/organisasi-rt",
-            icon: <Users className="h-5 w-5" />,
-            iconBg: "bg-primary/10 text-primary",
-            label: "Data Warga",
-          },
-          {
-            to: "/dashboard/kegiatan-rt",
-            icon: <CalendarDays className="h-5 w-5" />,
-            iconBg: "bg-emerald-100 text-emerald-600",
-            label: "Kegiatan",
-          },
-          {
-            to: "/dashboard/kas-rt",
-            icon: <Wallet className="h-5 w-5" />,
-            iconBg: "bg-blue-100 text-blue-600",
-            label: "Kas & Keuangan",
-          },
-          {
-            to: "/dashboard/pengaturan-iuran",
-            icon: <Banknote className="h-5 w-5" />,
-            iconBg: "bg-amber-100 text-amber-600",
-            label: "Pengaturan Iuran",
-          },
-        ].map((link) => (
-          <Link key={link.to} to={link.to}>
-            <Card className="group hover:border-primary/30 hover:shadow-md transition-all cursor-pointer">
-              <CardContent className="flex items-center gap-3 py-4">
-                <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${link.iconBg}`}>
-                  {link.icon}
-                </div>
-                <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900 transition-colors">
-                  {link.label}
-                </span>
-                <ArrowRight className="h-4 w-4 text-slate-400 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      <QuickLinks />
     </div>
   );
 }

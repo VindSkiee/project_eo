@@ -10,3 +10,4 @@ export { RecentEvents, RecentEventsCard } from './RecentEvents';
 export { RecentFundRequests } from './RecentFundRequests';
 export { RecentTransactions } from './RecentTransactions';
 export { QuickLinks } from './QuickLinks';
+export type { QuickLink } from './QuickLinks';
